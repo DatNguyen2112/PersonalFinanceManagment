@@ -1,6 +1,6 @@
 package BankingSystem.Services;
 
-import BankingSystem.Config.SepayApiClient;
+import BankingSystem.Config.Sepay.SepayApiClient;
 import BankingSystem.DTO.BankingDTO;
 import BankingSystem.Entity.SepayAccount.SepayAccount;
 import BankingSystem.Entity.SepayAccount.SepayAccountStatus;

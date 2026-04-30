@@ -2,15 +2,17 @@ package BankingSystem.Services;
 
 import BankingSystem.Entity.SpendingCategory;
 import BankingSystem.Repositories.SpendingCategoryRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+@Service
+@Slf4j
+@RequiredArgsConstructor
 public class SpendingCategoryService {
     private final SpendingCategoryRepository categoryRepository;
-
-    public SpendingCategoryService(SpendingCategoryRepository categoryRepository) {
-        this.categoryRepository = categoryRepository;
-    }
 
     /**
      * Phân loại giao dịch dựa trên keyword trong nội dung.
@@ -28,7 +30,7 @@ public class SpendingCategoryService {
                 .orElse(null);
     }
 
-    public List<SpendingCategory> getSystemCategories() {
-        return categoryRepository.findBySystemTrue();
+    public List<SpendingCategory> getSystemCategories(Long userId) {
+        return categoryRepository.findBySystemTrue(userId);
     }
 }

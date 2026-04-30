@@ -1,4 +1,4 @@
-package BankingSystem.Config;
+package BankingSystem.Config.Sepay;
 
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.boot.context.properties.ConfigurationProperties;

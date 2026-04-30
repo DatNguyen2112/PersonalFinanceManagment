@@ -1,5 +1,6 @@
 package BankingSystem.Entity;
 
+import BankingSystem.Entity.SepayAccount.SepayAccount;
 import jakarta.persistence.*;
 import lombok.*;
 import org.springframework.data.annotation.CreatedDate;
@@ -69,11 +70,7 @@ public class User {
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @Builder.Default
-    private List<Account> accounts = new ArrayList<>();
-
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    @Builder.Default
-    private List<BankingTask> tasks = new ArrayList<>();
+    private List<SepayAccount> accounts = new ArrayList<>();
 
     @CreatedDate
     @Column(name = "created_at", updatable = false)
