@@ -1,20 +1,3 @@
----
-name: sepay-personal-finance
-description: >
-  Hướng dẫn implement module Quản lý Tài chính Cá nhân (Personal Finance Management)
-  tích hợp SePay Open API trong hệ thống Spring Boot Banking có sẵn (JWT, Kafka,
-  MySQL, JPA). Thay thế mô hình liên kết trực tiếp ngân hàng bằng cách kéo giao dịch
-  qua SePay — bao gồm Pull API (polling) + Webhook nhận giao dịch real-time, tự động
-  phân loại chi tiêu, thống kê theo danh mục, báo cáo tài chính — theo đúng convention
-  dự án (BankingDTO pattern, @Slf4j, Testcontainers, v.v.).
-
-  Kích hoạt skill này khi người dùng đề cập đến: SePay, sepay api, tích hợp sepay,
-  quản lý tài chính cá nhân, personal finance, budget, ngân sách, expense tracking,
-  chi tiêu, savings goal, mục tiêu tiết kiệm, financial report, báo cáo tài chính,
-  spending category, danh mục chi tiêu, webhook giao dịch, biến động số dư, đồng bộ
-  giao dịch ngân hàng — trong ngữ cảnh dự án banking Spring Boot này.
----
-
 # SePay Personal Finance — Banking System Extension
 
 Module **Quản lý Tài chính Cá nhân qua SePay Open API** — không yêu cầu user liên kết
