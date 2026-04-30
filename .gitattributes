@@ -1,0 +1,4 @@
+/mvnw text eol=lf
+*.cmd text eol=crlf
+*.psd filter=lfs diff=lfs merge=lfs -text
+node_modules/@anthropic-ai/claude-code-win32-x64/claude.exe filter=lfs diff=lfs merge=lfs -text

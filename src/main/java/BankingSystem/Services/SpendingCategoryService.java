@@ -1,0 +1,34 @@
+package BankingSystem.Services;
+
+import BankingSystem.Entity.SpendingCategory;
+import BankingSystem.Repositories.SpendingCategoryRepository;
+
+import java.util.List;
+
+public class SpendingCategoryService {
+    private final SpendingCategoryRepository categoryRepository;
+
+    public SpendingCategoryService(SpendingCategoryRepository categoryRepository) {
+        this.categoryRepository = categoryRepository;
+    }
+
+    /**
+     * Phân loại giao dịch dựa trên keyword trong nội dung.
+     * Priority: user-defined > system categories.
+     * Trả về null nếu không khớp (để UI hiển thị "Khác").
+     */
+    public SpendingCategory autoClassify(String content) {
+        if (content == null) return null;
+        String lower = content.toLowerCase();
+
+        return categoryRepository.findAllWithKeywords().stream()
+                .filter(cat -> cat.getKeywords().stream()
+                        .anyMatch(kw -> lower.contains(kw.toLowerCase())))
+                .findFirst()
+                .orElse(null);
+    }
+
+    public List<SpendingCategory> getSystemCategories() {
+        return categoryRepository.findBySystemTrue();
+    }
+}
