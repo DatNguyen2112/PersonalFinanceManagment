@@ -23,13 +23,11 @@ public class BankingDTO {
     @AllArgsConstructor
     public static class RegisterRequest {
         @NotBlank
-        @Size(min = 3, max = 50)
         private String username;
         @NotBlank
         @Email
         private String email;
         @NotBlank
-        @Size(min = 8)
         private String password;
         @NotBlank
         @Size(min = 2, max = 50)

@@ -59,10 +59,12 @@ public class SecurityConfig {
                                 "/swagger-resources/**",
                                 "/webjars/**",
                                 "/actuator/**",
-                                "/error"
-                        ).permitAll()
+                                "/error",
+                                "/api/v1/personal-finance/**",
+                                "/api/v1/sepay/webhook"
+                        )
+                        .permitAll()
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
-                        .requestMatchers("/api/v1/finance/**").hasAnyRole("CUSTOMER", "ADMIN")
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())

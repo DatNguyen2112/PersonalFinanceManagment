@@ -1,5 +1,6 @@
 package BankingSystem.Services;
 
+import BankingSystem.Config.Kafka.KafkaEventConfig;
 import BankingSystem.Config.Sepay.SepayApiClient;
 import BankingSystem.DTO.BankingDTO;
 import BankingSystem.Entity.SepayAccount.SepayAccount;
@@ -75,11 +76,11 @@ public class SepayTransactionSyncService {
                     account.getAccountNumber(), newTxs.size());
 
             // Kafka event cho downstream (notification, budget check…)
-//            if (!newTxs.isEmpty()) {
-//                kafkaTemplate.send("banking.sepay.sync",
-//                        account.getUser().getId().toString(),
-//                        new SepaySyncEvent(account.getId(), newTxs.size()));
-//            }
+            if (!newTxs.isEmpty()) {
+                kafkaTemplate.send("banking.sepay.sync",
+                        account.getUser().getId().toString(),
+                        new KafkaEventConfig.SepaySyncEvent(account.getId(), newTxs.size()));
+            }
 
         } catch (SepayApiExecption ex) {
             log.error("sepay_sync_failed account={}", account.getAccountNumber(), ex);

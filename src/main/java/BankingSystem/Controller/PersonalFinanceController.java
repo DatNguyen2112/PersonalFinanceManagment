@@ -52,7 +52,8 @@ public class PersonalFinanceController {
     @GetMapping("/bank-accounts")
     public ResponseEntity<List<BankingDTO.BankAccountResponse>> getAccounts(
             @AuthenticationPrincipal UserDetailsImpl.BankingUserDetails u) {
-        return ResponseEntity.ok(bankAccountService.getAccounts(u.getUserId()));
+        var result = bankAccountService.getAccounts(u.getUserId());
+        return ResponseEntity.ok(result);
     }
 
     @PostMapping("/bank-accounts/{id}/sync")

@@ -24,12 +24,12 @@ import org.springframework.web.bind.annotation.*;
 @Tag(name = "Authentication")
 public class UserController {
     private final AuthService authService;
-    private final JWTService jwtTokenProvider;
 
     @PostMapping("/register")
     @Operation(summary = "Register a new user")
     public ResponseEntity<BankingDTO.AuthResponse> register(@Valid @RequestBody BankingDTO.RegisterRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(authService.register(request));
+        var result = authService.register(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 
     @PostMapping("/login")
