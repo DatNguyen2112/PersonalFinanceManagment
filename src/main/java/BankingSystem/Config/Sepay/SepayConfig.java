@@ -23,4 +23,13 @@ public class SepayConfig {
     public RateLimiter sepayRateLimiter(SepayProperties props) {
         return RateLimiter.create(props.rateLimitPerSecond());
     }
+
+    @Bean
+    public RestClient bankHubRestClient(SepayBankHubProperties props) {
+        return RestClient.builder()
+                .baseUrl(props.baseUrl())
+                .defaultHeader("Content-Type", "application/json")
+                .defaultHeader("Accept", "application/json")
+                .build();
+    }
 }

@@ -44,6 +44,12 @@ public class SepayAccount {
     @Column(name = "last_synced_transaction_id")
     private Long lastSyncedTransactionId;
 
+    @Column(name = "bank_hub_xid", unique = true, length = 100)
+    private String bankHubXid;          // XID từ SePay Bank Hub
+
+    @Column(name = "account_holder_name", length = 200)
+    private String accountHolderName;   // Tên chủ tài khoản
+
     @Enumerated(EnumType.STRING)
     @Builder.Default
     private SepayAccountStatus status = SepayAccountStatus.ACTIVE;

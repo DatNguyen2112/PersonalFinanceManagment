@@ -14,12 +14,5 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmail(String email);
     boolean existsByUsername(String username);
     boolean existsByEmail(String email);
-
-    @Modifying
-    @Query("UPDATE User u SET u.failedLoginAttempts = u.failedLoginAttempts + 1 WHERE u.username = :username")
-    void incrementFailedAttempts(String username);
-
-    @Modifying
-    @Query("UPDATE User u SET u.failedLoginAttempts = 0, u.accountNonLocked = true WHERE u.username = :username")
-    void resetFailedAttempts(String username);
+    Optional<User> findByBankHubCompanyXid(String companyXid);
 }

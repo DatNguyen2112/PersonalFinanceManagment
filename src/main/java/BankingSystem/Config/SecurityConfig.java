@@ -30,11 +30,10 @@ import java.util.List;
 @EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
+
     private final JWTService jwtService;
     private final UserDetailsService userDetailsService;
 
-    // ✅ Khai báo filter là @Bean thay vì @Component
-    // → Spring Security quản lý, không bị servlet container đăng ký thêm lần nữa
     @Bean
     public JwtAuthenticationFilter jwtAuthenticationFilter() {
         return new JwtAuthenticationFilter(jwtService, userDetailsService);
@@ -49,6 +48,7 @@ public class SecurityConfig {
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
+                        // ── Public ─────────────────────────────────────────────
                         .requestMatchers(
                                 "/api/v1/auth/**",
                                 "/v3/api-docs/**",
@@ -59,16 +59,35 @@ public class SecurityConfig {
                                 "/swagger-resources/**",
                                 "/webjars/**",
                                 "/actuator/**",
-                                "/error",
-                                "/api/v1/personal-finance/**",
-                                "/api/v1/sepay/webhook"
-                        )
-                        .permitAll()
-                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                                "/error"
+                        ).permitAll()
+
+                        // ── Webhook — bảo vệ bằng custom header, không cần JWT ─
+                        .requestMatchers(
+                                "/api/v1/sepay/webhook",
+                                "/api/v1/sepay/bankhub/webhook"
+                        ).permitAll()
+
+                        .requestMatchers("/api/v1/bank-hub/init-link").hasAnyRole("CUSTOMER", "ADMIN")
+                        .requestMatchers("/api/v1/bank-hub/init-unlink").hasAnyRole("CUSTOMER", "ADMIN")
+                        .requestMatchers("/api/v1/bank-hub/sync").hasAnyRole("CUSTOMER", "ADMIN")
+                        .requestMatchers("/api/v1/bank-hub/callback").permitAll()   // SePay redirect
+                        .requestMatchers("/api/v1/bank-hub/webhook").permitAll()    // SePay Bank Hub gọi vào
+
+                        // ── Personal Finance — yêu cầu JWT ─────────────────────
+                        .requestMatchers("/api/v1/personal-finance/**")
+                        .hasAnyRole("CUSTOMER", "ADMIN")
+
+                        // ── Admin ───────────────────────────────────────────────
+                        .requestMatchers("/api/v1/admin/**")
+                        .hasRole("ADMIN")
+
+                        // ── Còn lại ─────────────────────────────────────────────
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())
-                .addFilterBefore(jwtAuthenticationFilter(), UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthenticationFilter(),
+                        UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
@@ -78,7 +97,9 @@ public class SecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOriginPatterns(List.of("*"));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("*"));
+        config.setAllowedHeaders(List.of(
+                "*"
+        ));
         config.setExposedHeaders(List.of("Authorization"));
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
@@ -90,13 +111,15 @@ public class SecurityConfig {
 
     @Bean
     public AuthenticationProvider authenticationProvider() {
-        DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
+        DaoAuthenticationProvider provider =
+                new DaoAuthenticationProvider(userDetailsService);
         provider.setPasswordEncoder(passwordEncoder());
         return provider;
     }
 
     @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
+    public AuthenticationManager authenticationManager(
+            AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
     }
 

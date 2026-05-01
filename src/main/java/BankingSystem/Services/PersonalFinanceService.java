@@ -34,7 +34,7 @@ public class PersonalFinanceService {
     private final SepayTransactionRepository transactionRepository;
     private final BudgetRepository budgetRepository;
     private final SpendingCategoryRepository categoryRepository;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final KafkaProducerService kafkaProducerService;
 
     // ── Budget ─────────────────────────────────────────────────────────────
 
@@ -209,9 +209,7 @@ public class PersonalFinanceService {
         if (alert) {
             log.warn("budget_alert_triggered userId={} budgetId={} usage={}%",
                     userId, budget.getId(), usagePercent);
-            kafkaTemplate.send(
-                    "banking.sepay.budget-alert",
-                    userId.toString(),
+            kafkaProducerService.sendBudgetAlert(userId,
                     new KafkaEventConfig.BudgetAlertEvent(budget.getId(), usagePercent));
         }
 

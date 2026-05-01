@@ -72,6 +72,9 @@ public class User {
     @Builder.Default
     private List<SepayAccount> accounts = new ArrayList<>();
 
+    @Column(name = "bank_hub_company_xid", length = 100)
+    private String bankHubCompanyXid;
+
     @CreatedDate
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

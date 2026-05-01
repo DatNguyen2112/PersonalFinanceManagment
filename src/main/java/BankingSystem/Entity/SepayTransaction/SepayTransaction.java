@@ -34,7 +34,7 @@ public class SepayTransaction {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "sepay_id", unique = true, nullable = false)
+    @Column(name = "sepay_id", unique = true)
     private Long sepayId;                   // ID từ SePay — tránh duplicate
 
     @ManyToOne(fetch = FetchType.LAZY)

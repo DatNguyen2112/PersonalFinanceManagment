@@ -25,8 +25,7 @@ public class SepayWebhookService {
     private final SepayTransactionRepository transactionRepository;
     private final SepayBankAccountRepository bankAccountRepository;
     private final SpendingCategoryService categoryService;
-    private final PersonalFinanceService financeService;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final KafkaProducerService kafkaProducerService;
 
     @Transactional
     public void process(BankingDTO.SepayWebhookPayload payload) {
@@ -53,7 +52,7 @@ public class SepayWebhookService {
         var category = categoryService.autoClassify(payload.content());
 
         var tx = SepayTransaction.builder()
-                .sepayId(null)                  // webhook không trả sepay id
+                .sepayId(payload.sepayId())
                 .user(account.getUser())
                 .sepayBankAccount(account)
                 .accountNumber(payload.accountNumber())
@@ -76,8 +75,8 @@ public class SepayWebhookService {
                 payload.accountNumber(), direction,
                 direction == TransactionDirection.IN ? payload.amountIn() : payload.amountOut());
 
-        kafkaTemplate.send("banking.sepay.transaction",
-                account.getUser().getId().toString(),
+        kafkaProducerService.sendSepayTransaction(
+                account.getUser().getId(),
                 new KafkaEventConfig.SepayTransactionEvent(tx.getId(), direction.name()));
     }
 

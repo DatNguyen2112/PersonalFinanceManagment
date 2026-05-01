@@ -30,7 +30,7 @@ public class SepayTransactionSyncService {
     private final SepayBankAccountRepository bankAccountRepository;
     private final SepayTransactionRepository transactionRepository;
     private final SpendingCategoryService categoryService;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final KafkaProducerService kafkaProducerService;
 
     @Scheduled(cron = "${sepay.api.sync.cron}")
     public void scheduledSync() {
@@ -44,7 +44,7 @@ public class SepayTransactionSyncService {
         try {
             var req = new BankingDTO.SepayListRequest(
                     account.getAccountNumber(),
-                    account.getLastSyncedTransactionId(),  // incremental via since_id
+                    account.getLastSyncedTransactionId(),
                     100,
                     null, null
             );
@@ -77,8 +77,8 @@ public class SepayTransactionSyncService {
 
             // Kafka event cho downstream (notification, budget check…)
             if (!newTxs.isEmpty()) {
-                kafkaTemplate.send("banking.sepay.sync",
-                        account.getUser().getId().toString(),
+                kafkaProducerService.sendSepaySync(
+                        account.getId(),
                         new KafkaEventConfig.SepaySyncEvent(account.getId(), newTxs.size()));
             }
 

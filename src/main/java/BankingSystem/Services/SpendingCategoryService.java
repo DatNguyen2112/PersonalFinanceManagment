@@ -23,11 +23,13 @@ public class SpendingCategoryService {
         if (content == null) return null;
         String lower = content.toLowerCase();
 
-        return categoryRepository.findAllWithKeywords().stream()
-                .filter(cat -> cat.getKeywords().stream()
-                        .anyMatch(kw -> lower.contains(kw.toLowerCase())))
-                .findFirst()
-                .orElse(null);
+        return null; // Tạm thời tắt auto-classify để ưu tiên phân loại thủ công
+
+//        return categoryRepository.findAllWithKeywords().stream()
+//                .filter(cat -> cat.getKeywords().stream()
+//                        .anyMatch(kw -> lower.contains(kw.toLowerCase())))
+//                .findFirst()
+//                .orElse(null);
     }
 
     public List<SpendingCategory> getSystemCategories(Long userId) {

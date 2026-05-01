@@ -17,4 +17,10 @@ public interface SepayBankAccountRepository extends JpaRepository<SepayAccount, 
     List<SepayAccount> findByUserId(Long userId);
 
     List<SepayAccount> findByStatus(SepayAccountStatus status);
+
+    boolean existsByBankHubXid(String bankHubXid);
+
+    Optional<SepayAccount> findByBankHubXid(String bankHubXid);
+
+    Optional<SepayAccount> findByBankHubXidAndUserId(String bankHubXid, Long userId);
 }

@@ -1,12 +1,10 @@
 package BankingSystem.Controller;
 
 import BankingSystem.DTO.BankingDTO;
+import BankingSystem.DTO.SepayBankHub;
 import BankingSystem.Entity.SpendingCategory;
 import BankingSystem.JWTConfig.UserDetailsImpl;
-import BankingSystem.Services.PersonalFinanceService;
-import BankingSystem.Services.SepayBankAccountService;
-import BankingSystem.Services.SepayTransactionSyncService;
-import BankingSystem.Services.SpendingCategoryService;
+import BankingSystem.Services.*;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -38,6 +36,7 @@ public class PersonalFinanceController {
     private final SepayTransactionSyncService syncService;
     private final PersonalFinanceService financeService;
     private final SpendingCategoryService categoryService;
+    private final SepayBankHubService bankHubService;
 
     // ── Tài khoản ngân hàng ────────────────────────────────────────────────
 

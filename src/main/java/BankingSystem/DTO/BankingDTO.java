@@ -122,6 +122,7 @@ public class BankingDTO {
     // ── Webhook payload ────────────────────────────────────────────────────────
 
     public record SepayWebhookPayload(
+            Long sepayId,
             String gateway,
             @JsonProperty("transactionDate") String transactionDate,
             @JsonProperty("accountNumber") String accountNumber,
