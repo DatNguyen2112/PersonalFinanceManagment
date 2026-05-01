@@ -8,12 +8,12 @@ import BankingSystem.Entity.SepayAccount.SepayAccountStatus;
 import BankingSystem.Entity.SepayTransaction.SepayTransaction;
 import BankingSystem.Entity.SepayTransaction.SyncSourceType;
 import BankingSystem.Entity.SepayTransaction.TransactionDirection;
-import BankingSystem.Exception.SepayApiExecption;
+import BankingSystem.Exception.SepayApiException;
+import BankingSystem.Exception.SepayRateLimitException;
 import BankingSystem.Repositories.SepayBankAccountRepository;
 import BankingSystem.Repositories.SepayTransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -45,13 +45,14 @@ public class SepayTransactionSyncService {
             var req = new BankingDTO.SepayListRequest(
                     account.getAccountNumber(),
                     account.getLastSyncedTransactionId(),
-                    100,
-                    null, null
-            );
+                    100, null, null);
 
             var response = sepayApiClient.listTransactions(req);
+
             if (response == null || response.transactions() == null
                     || response.transactions().isEmpty()) {
+                log.info("sepay_sync_no_new_tx account={}",
+                        maskAccount(account.getAccountNumber()));
                 return;
             }
 
@@ -73,18 +74,30 @@ public class SepayTransactionSyncService {
                     });
 
             log.info("sepay_sync_done account={} new_tx_count={}",
-                    account.getAccountNumber(), newTxs.size());
+                    maskAccount(account.getAccountNumber()), newTxs.size());
 
-            // Kafka event cho downstream (notification, budget check…)
             if (!newTxs.isEmpty()) {
                 kafkaProducerService.sendSepaySync(
                         account.getId(),
                         new KafkaEventConfig.SepaySyncEvent(account.getId(), newTxs.size()));
             }
 
-        } catch (SepayApiExecption ex) {
-            log.error("sepay_sync_failed account={}", account.getAccountNumber(), ex);
+        } catch (SepayRateLimitException ex) {
+            log.warn("sepay_sync_rate_limited account={} — skipping this cycle",
+                    maskAccount(account.getAccountNumber()));
+        } catch (SepayApiException ex) {
+            log.error("sepay_sync_api_error account={} error={}",
+                    maskAccount(account.getAccountNumber()), ex.getMessage());
+        } catch (Exception ex) {
+            log.error("sepay_sync_unexpected_error account={}",
+                    maskAccount(account.getAccountNumber()), ex);
         }
+    }
+
+    private String maskAccount(String accountNumber) {
+        if (accountNumber == null || accountNumber.length() < 4) return "****";
+        return "*".repeat(accountNumber.length() - 4)
+                + accountNumber.substring(accountNumber.length() - 4);
     }
 
     private SepayTransaction mapToEntity(BankingDTO.SepayTransactionItem item,

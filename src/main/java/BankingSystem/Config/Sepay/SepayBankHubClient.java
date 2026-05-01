@@ -1,15 +1,13 @@
 package BankingSystem.Config.Sepay;
 
-import BankingSystem.DTO.BankingDTO;
 import BankingSystem.DTO.SepayBankHub;
-import BankingSystem.Exception.SepayApiExecption;
+import BankingSystem.Exception.SepayApiException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityNotFoundException;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatusCode;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -19,11 +17,17 @@ import java.util.*;
 
 @Component
 @Slf4j
-@RequiredArgsConstructor
 public class SepayBankHubClient {
 
     private final SepayBankHubProperties props;
     private final RestClient bankHubRestClient;
+
+    public SepayBankHubClient(
+            SepayBankHubProperties props,
+            @Qualifier("bankHubRestClient") RestClient bankHubRestClient) {
+        this.props = props;
+        this.bankHubRestClient = bankHubRestClient;
+    }
 
     // Cache access token trong memory (tránh gọi /v1/token liên tục)
     private volatile String cachedToken;
@@ -55,12 +59,12 @@ public class SepayBankHubClient {
                 .header("Authorization", basicAuth)
                 .retrieve()
                 .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
-                    throw new SepayApiExecption("BankHub auth failed: " + res.getStatusCode());
+                    throw new SepayApiException("BankHub auth failed: " + res.getStatusCode());
                 })
                 .body(SepayBankHub.BankHubTokenResponse.class);
 
         if (response == null) {
-            throw new SepayApiExecption("BankHub token response is null");
+            throw new SepayApiException("BankHub token response is null");
         }
 
         cachedToken = response.accessToken();
@@ -95,7 +99,7 @@ public class SepayBankHubClient {
                 .body(body)
                 .retrieve()
                 .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
-                    throw new SepayApiExecption("BankHub create link token failed: "
+                    throw new SepayApiException("BankHub create link token failed: "
                             + res.getStatusCode());
                 })
                 .body(SepayBankHub.BankHubLinkTokenResponse.class);

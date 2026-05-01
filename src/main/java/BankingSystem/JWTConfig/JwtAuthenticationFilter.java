@@ -1,5 +1,9 @@
 package BankingSystem.JWTConfig;
 
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.MalformedJwtException;
+import io.jsonwebtoken.UnsupportedJwtException;
+import io.jsonwebtoken.security.SignatureException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -78,12 +82,48 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     SecurityContextHolder.getContext().setAuthentication(authToken);
                 }
             }
-        } catch (Exception e) {
-            log.warn("JWT authentication failed [{}]: {}",
-                    request.getRequestURI(), e.getMessage());
+        } catch (ExpiredJwtException ex) {
+            log.warn("jwt_expired path={}", request.getRequestURI());
+            sendAuthError(response, "TOKEN_EXPIRED",
+                    "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại",
+                    HttpServletResponse.SC_UNAUTHORIZED);
+            return;
+
+        } catch (MalformedJwtException | SignatureException ex) {
+            log.warn("jwt_invalid path={} error={}", request.getRequestURI(), ex.getMessage());
+            sendAuthError(response, "INVALID_TOKEN",
+                    "Token không hợp lệ",
+                    HttpServletResponse.SC_UNAUTHORIZED);
+            return;
+
+        } catch (UnsupportedJwtException ex) {
+            log.warn("jwt_unsupported path={}", request.getRequestURI());
+            sendAuthError(response, "UNSUPPORTED_TOKEN",
+                    "Token không được hỗ trợ",
+                    HttpServletResponse.SC_UNAUTHORIZED);
+            return;
+
+        } catch (Exception ex) {
+            log.error("jwt_filter_error path={} error={}",
+                    request.getRequestURI(), ex.getMessage(), ex);
+            sendAuthError(response, "AUTH_ERROR",
+                    "Lỗi xác thực, vui lòng đăng nhập lại",
+                    HttpServletResponse.SC_UNAUTHORIZED);
+            return;
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private void sendAuthError(HttpServletResponse response,
+                               String code, String message, int status)
+            throws IOException {
+        response.setStatus(status);
+        response.setContentType("application/json;charset=UTF-8");
+        response.getWriter().write(
+                """
+                {"code":"%s","message":"%s"}
+                """.formatted(code, message).trim());
     }
 
     private boolean isWebhookPath(String uri) {

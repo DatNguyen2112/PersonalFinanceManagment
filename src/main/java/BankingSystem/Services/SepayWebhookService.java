@@ -5,6 +5,8 @@ import BankingSystem.DTO.BankingDTO;
 import BankingSystem.Entity.SepayTransaction.SepayTransaction;
 import BankingSystem.Entity.SepayTransaction.SyncSourceType;
 import BankingSystem.Entity.SepayTransaction.TransactionDirection;
+import BankingSystem.Exception.BankAccountNotFoundException;
+import BankingSystem.Exception.BankingException;
 import BankingSystem.Repositories.SepayBankAccountRepository;
 import BankingSystem.Repositories.SepayTransactionRepository;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 
 @Service
 @Slf4j
@@ -29,55 +32,64 @@ public class SepayWebhookService {
 
     @Transactional
     public void process(BankingDTO.SepayWebhookPayload payload) {
-        if (transactionRepository.existsByReferenceNumber(payload.referenceCode())) {
-            log.info("sepay_webhook_duplicate ref={}", payload.referenceCode());
-            return;
+        try {
+            if (transactionRepository.existsByReferenceNumber(payload.referenceCode())) {
+                log.info("sepay_webhook_duplicate ref={}", payload.referenceCode());
+                return;
+            }
+
+            var account = bankAccountRepository
+                    .findByAccountNumber(payload.accountNumber())
+                    .orElseThrow(() -> new BankAccountNotFoundException(
+                            payload.accountNumber()));
+
+            var direction = payload.amountIn() != null
+                    && payload.amountIn().compareTo(BigDecimal.ZERO) > 0
+                    ? TransactionDirection.IN : TransactionDirection.OUT;
+
+            var category = categoryService.autoClassify(payload.content());
+
+            var tx = SepayTransaction.builder()
+                    .user(account.getUser())
+                    .sepayBankAccount(account)
+                    .accountNumber(payload.accountNumber())
+                    .bankBrandName(payload.gateway())
+                    .transactionDate(parseDate(payload.transactionDate()))
+                    .amountIn(coalesce(payload.amountIn()))
+                    .amountOut(coalesce(payload.amountOut()))
+                    .accumulated(coalesce(payload.accumulated()))
+                    .transactionContent(payload.content())
+                    .referenceNumber(payload.referenceCode())
+                    .code(payload.code())
+                    .subAccount(payload.subAccount())
+                    .direction(direction)
+                    .category(category)
+                    .source(SyncSourceType.WEBHOOK)
+                    .build();
+
+            transactionRepository.save(tx);
+
+            log.info("sepay_webhook_saved account={} direction={} amount={}",
+                    payload.accountNumber(), direction,
+                    direction == TransactionDirection.IN
+                            ? payload.amountIn() : payload.amountOut());
+
+            kafkaProducerService.sendSepayTransaction(
+                    account.getUser().getId(),
+                    new KafkaEventConfig.SepayTransactionEvent(tx.getId(), direction.name()));
+
+        } catch (BankAccountNotFoundException ex) {
+            log.warn("sepay_webhook_unknown_account account={}", payload.accountNumber());
+        } catch (DateTimeParseException ex) {
+            log.error("sepay_webhook_invalid_date date={} error={}",
+                    payload.transactionDate(), ex.getMessage());
+            throw new BankingException("INVALID_DATE_FORMAT",
+                    "Invalid transaction date: " + payload.transactionDate(), ex);
+        } catch (Exception ex) {
+            log.error("sepay_webhook_process_failed ref={} error={}",
+                    payload.referenceCode(), ex.getMessage(), ex);
+            throw ex;
         }
-
-        var account = bankAccountRepository
-                .findByAccountNumber(payload.accountNumber())
-                .orElseGet(() -> {
-                    // Tài khoản chưa được đăng ký trong hệ thống — bỏ qua
-                    log.warn("sepay_webhook_unknown_account account={}",
-                            payload.accountNumber());
-                    return null;
-                });
-
-        if (account == null) return;
-
-        var direction = payload.amountIn() != null
-                && payload.amountIn().compareTo(BigDecimal.ZERO) > 0
-                ? TransactionDirection.IN : TransactionDirection.OUT;
-
-        var category = categoryService.autoClassify(payload.content());
-
-        var tx = SepayTransaction.builder()
-                .sepayId(payload.sepayId())
-                .user(account.getUser())
-                .sepayBankAccount(account)
-                .accountNumber(payload.accountNumber())
-                .bankBrandName(payload.gateway())
-                .transactionDate(parseDate(payload.transactionDate()))
-                .amountIn(coalesce(payload.amountIn()))
-                .amountOut(coalesce(payload.amountOut()))
-                .accumulated(coalesce(payload.accumulated()))
-                .transactionContent(payload.content())
-                .referenceNumber(payload.referenceCode())
-                .code(payload.code())
-                .subAccount(payload.subAccount())
-                .direction(direction)
-                .category(category)
-                .source(SyncSourceType.WEBHOOK)
-                .build();
-
-        transactionRepository.save(tx);
-        log.info("sepay_webhook_saved account={} direction={} amount={}",
-                payload.accountNumber(), direction,
-                direction == TransactionDirection.IN ? payload.amountIn() : payload.amountOut());
-
-        kafkaProducerService.sendSepayTransaction(
-                account.getUser().getId(),
-                new KafkaEventConfig.SepayTransactionEvent(tx.getId(), direction.name()));
     }
 
     private LocalDateTime parseDate(String raw) {

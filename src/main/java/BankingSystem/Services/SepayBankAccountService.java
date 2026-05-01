@@ -3,6 +3,9 @@ package BankingSystem.Services;
 import BankingSystem.DTO.BankingDTO;
 import BankingSystem.Entity.SepayAccount.SepayAccount;
 import BankingSystem.Entity.SepayAccount.SepayAccountStatus;
+import BankingSystem.Exception.BankAccountAlreadyExistsException;
+import BankingSystem.Exception.BankAccountNotFoundException;
+import BankingSystem.Exception.BankingException;
 import BankingSystem.Repositories.SepayBankAccountRepository;
 import BankingSystem.Repositories.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
@@ -27,32 +30,39 @@ public class SepayBankAccountService {
     @Transactional
     public BankingDTO.BankAccountResponse addAccount(
             Long userId, BankingDTO.AddBankAccountRequest req) {
+        try {
+            if (bankAccountRepository.existsByAccountNumber(req.accountNumber())) {
+                throw new BankAccountAlreadyExistsException(req.accountNumber());
+            }
 
-        if (bankAccountRepository.existsByAccountNumber(req.accountNumber())) {
-            throw new IllegalArgumentException(
-                    "Account already registered: " + req.accountNumber());
+            var user = userRepository.findById(userId)
+                    .orElseThrow(() -> new EntityNotFoundException(
+                            "User not found id=" + userId));
+
+            var account = SepayAccount.builder()
+                    .user(user)
+                    .accountNumber(req.accountNumber())
+                    .bankBrandName(req.bankBrandName())
+                    .displayName(req.displayName() != null
+                            ? req.displayName()
+                            : req.bankBrandName() + " - " + maskAccountNumber(req.accountNumber()))
+                    .status(SepayAccountStatus.ACTIVE)
+                    .build();
+
+            bankAccountRepository.save(account);
+
+            log.info("sepay_account_added userId={} account={} bank={}",
+                    userId, maskAccountNumber(req.accountNumber()), req.bankBrandName());
+
+            return mapToResponse(account);
+
+        } catch (BankingException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            log.error("sepay_account_add_failed userId={} error={}", userId, ex.getMessage(), ex);
+            throw new BankingException("ACCOUNT_ADD_ERROR",
+                    "Không thể thêm tài khoản ngân hàng", ex);
         }
-
-        var user = userRepository.findById(userId)
-                .orElseThrow(() -> new EntityNotFoundException(
-                        "User not found id=" + userId));
-
-        var account = SepayAccount.builder()
-                .user(user)
-                .accountNumber(req.accountNumber())
-                .bankBrandName(req.bankBrandName())
-                .displayName(req.displayName() != null
-                        ? req.displayName()
-                        : req.bankBrandName() + " - " + maskAccountNumber(req.accountNumber()))
-                .status(SepayAccountStatus.ACTIVE)
-                .build();
-
-        bankAccountRepository.save(account);
-
-        log.info("sepay_account_added userId={} accountNumber={} bank={}",
-                userId, maskAccountNumber(req.accountNumber()), req.bankBrandName());
-
-        return mapToResponse(account);
     }
 
     // ── Get list ───────────────────────────────────────────────────────────
@@ -67,11 +77,10 @@ public class SepayBankAccountService {
 
     // ── Get single — dùng cho sync, verify ownership ───────────────────────
 
-    @Transactional(readOnly = true)
     public SepayAccount getAccountForUser(Long accountId, Long userId) {
         return bankAccountRepository.findByIdAndUserId(accountId, userId)
-                .orElseThrow(() -> new EntityNotFoundException(
-                        "Bank account not found id=" + accountId));
+                .orElseThrow(() -> new BankAccountNotFoundException(
+                        "id=" + accountId + " userId=" + userId));
     }
 
     // ── Update display name ────────────────────────────────────────────────

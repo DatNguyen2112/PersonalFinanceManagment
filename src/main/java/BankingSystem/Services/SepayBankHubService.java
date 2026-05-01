@@ -6,6 +6,8 @@ import BankingSystem.DTO.BankingDTO;
 import BankingSystem.DTO.SepayBankHub;
 import BankingSystem.Entity.SepayAccount.SepayAccount;
 import BankingSystem.Entity.SepayAccount.SepayAccountStatus;
+import BankingSystem.Exception.BankHubException;
+import BankingSystem.Exception.BankingException;
 import BankingSystem.Repositories.SepayBankAccountRepository;
 import BankingSystem.Repositories.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
@@ -30,19 +32,27 @@ public class SepayBankHubService {
 
     @Transactional(readOnly = true)
     public SepayBankHub.BankHubInitResponse initLinkAccount(Long userId) {
-        // Kiểm tra user tồn tại
-        userRepository.findById(userId)
-                .orElseThrow(() -> new EntityNotFoundException("User not found id=" + userId));
+        try {
+            userRepository.findById(userId)
+                    .orElseThrow(() -> new EntityNotFoundException(
+                            "User not found id=" + userId));
 
-        var response = bankHubClient.createLinkToken(
-                "LINK_BANK_ACCOUNT", null, null);
+            var response = bankHubClient.createLinkToken(
+                    "LINK_BANK_ACCOUNT", null, null);
 
-        log.info("bank_hub_init_link userId={} linkTokenXid={}", userId, response.xid());
+            log.info("bank_hub_init_link userId={} linkTokenXid={}",
+                    userId, response.xid());
 
-        return new SepayBankHub.BankHubInitResponse(
-                response.xid(),
-                response.hostedLinkUrl(),
-                response.expiresAt());
+            return new SepayBankHub.BankHubInitResponse(
+                    response.xid(), response.hostedLinkUrl(), response.expiresAt());
+
+        } catch (BankingException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            log.error("bank_hub_init_link_failed userId={} error={}",
+                    userId, ex.getMessage(), ex);
+            throw new BankHubException("Không thể khởi tạo liên kết ngân hàng", ex);
+        }
     }
 
     // ── Khởi tạo hủy liên kết ─────────────────────────────────────────────
@@ -72,17 +82,26 @@ public class SepayBankHubService {
 
     @Transactional
     public void processWebhookEvent(SepayBankHub.BankHubWebhookPayload payload) {
-        log.info("bank_hub_webhook_event event={} xid={}", payload.event(), payload.xid());
+        try {
+            log.info("bank_hub_webhook_event event={} xid={}",
+                    payload.event(), payload.xid());
 
-        switch (payload.event()) {
-            case "BANK_ACCOUNT_LINKED"   -> handleAccountLinked(payload.metadata());
-            case "BANK_ACCOUNT_UNLINKED" -> handleAccountUnlinked(payload.metadata());
-            case "LINK_SESSION_STATE_CHANGED" ->
-                    log.info("bank_hub_session_state state={} account={}",
-                            payload.metadata().state(),
-                            maskAccount(payload.metadata().accountNumber()));
-            default ->
-                    log.debug("bank_hub_webhook_ignored event={}", payload.event());
+            switch (payload.event()) {
+                case "BANK_ACCOUNT_LINKED"   -> handleAccountLinked(payload.metadata());
+                case "BANK_ACCOUNT_UNLINKED" -> handleAccountUnlinked(payload.metadata());
+                case "LINK_SESSION_STATE_CHANGED" ->
+                        log.info("bank_hub_session_state state={}",
+                                payload.metadata().state());
+                default ->
+                        log.debug("bank_hub_webhook_ignored event={}", payload.event());
+            }
+        } catch (BankingException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            log.error("bank_hub_webhook_failed event={} xid={} error={}",
+                    payload.event(), payload.xid(), ex.getMessage(), ex);
+            // re-throw để SePay nhận HTTP 500 và retry
+            throw new BankHubException("Webhook processing failed", ex);
         }
     }
 

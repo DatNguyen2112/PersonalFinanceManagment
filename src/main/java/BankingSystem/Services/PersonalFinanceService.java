@@ -7,6 +7,8 @@ import BankingSystem.Entity.SepayTransaction.SepayTransaction;
 import BankingSystem.Entity.SepayTransaction.TransactionDirection;
 import BankingSystem.Entity.SpendingCategory;
 import BankingSystem.Entity.User;
+import BankingSystem.Exception.BankingException;
+import BankingSystem.Exception.BudgetNotFoundException;
 import BankingSystem.Repositories.BudgetRepository;
 import BankingSystem.Repositories.SepayTransactionRepository;
 import BankingSystem.Repositories.SpendingCategoryRepository;
@@ -41,37 +43,50 @@ public class PersonalFinanceService {
     @Transactional
     public BankingDTO.BudgetStatusResponse createOrUpdateBudget(
             Long userId, BankingDTO.BudgetRequest req) {
+        try {
+            var category = resolveCategory(req.categoryId());
 
-        var category = resolveCategory(req.categoryId());
+            var budget = findExistingBudget(userId, req.categoryId(), req.year(), req.month())
+                    .orElseGet(() -> Budget.builder()
+                            .user(User.builder().id(userId).build())
+                            .category(category)
+                            .year(req.year())
+                            .month(req.month())
+                            .build());
 
-        var budget = findExistingBudget(userId, req.categoryId(), req.year(), req.month())
-                .orElseGet(() -> Budget.builder()
-                        .user(User.builder().id(userId).build())
-                        .category(category)
-                        .year(req.year())
-                        .month(req.month())
-                        .build());
+            budget.setLimitAmount(req.limitAmount());
+            budget.setAlertThreshold(req.alertThreshold());
+            budgetRepository.save(budget);
 
-        budget.setLimitAmount(req.limitAmount());
-        budget.setAlertThreshold(req.alertThreshold());
-        budgetRepository.save(budget);
+            log.info("budget_saved userId={} categoryId={} year={} month={}",
+                    userId, req.categoryId(), req.year(), req.month());
 
-        log.info("budget_saved userId={} categoryId={} year={} month={} limit={}",
-                userId, req.categoryId(), req.year(), req.month(), req.limitAmount());
+            return buildBudgetStatus(budget, userId);
 
-        return buildBudgetStatus(budget, userId);
+        } catch (BankingException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            log.error("budget_create_failed userId={} error={}", userId, ex.getMessage(), ex);
+            throw new BankingException("BUDGET_CREATE_ERROR",
+                    "Không thể tạo ngân sách", ex);
+        }
     }
 
     @Transactional(readOnly = true)
     public BankingDTO.BudgetStatusResponse getBudgetStatus(
             Long userId, Long categoryId, int year, int month) {
+        try {
+            var budget = findExistingBudget(userId, categoryId, year, month)
+                    .orElseThrow(() -> new BudgetNotFoundException(categoryId, year, month));
+            return buildBudgetStatus(budget, userId);
 
-        var budget = findExistingBudget(userId, categoryId, year, month)
-                .orElseThrow(() -> new EntityNotFoundException(
-                        "Budget not found for categoryId=%s year=%d month=%d"
-                                .formatted(categoryId, year, month)));
-
-        return buildBudgetStatus(budget, userId);
+        } catch (BankingException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            log.error("budget_get_failed userId={} error={}", userId, ex.getMessage(), ex);
+            throw new BankingException("BUDGET_FETCH_ERROR",
+                    "Không thể lấy thông tin ngân sách", ex);
+        }
     }
 
     @Transactional(readOnly = true)
@@ -103,23 +118,24 @@ public class PersonalFinanceService {
     @Transactional(readOnly = true)
     public BankingDTO.MonthlySummaryResponse getMonthlySummary(
             Long userId, int year, int month) {
+        try {
+            var range = DateRange.ofMonth(year, month);
+            var totalIn  = coalesce(transactionRepository
+                    .sumAmountInByUserAndDateRange(userId, range.start(), range.end()));
+            var totalOut = coalesce(transactionRepository
+                    .sumAmountOutByUserAndDateRange(userId, range.start(), range.end()));
+            var breakdown = buildCategoryBreakdown(userId, range, totalOut);
 
-        var range = DateRange.ofMonth(year, month);
+            return new BankingDTO.MonthlySummaryResponse(
+                    year, month, totalIn, totalOut,
+                    totalIn.subtract(totalOut), breakdown);
 
-        var totalIn  = coalesce(transactionRepository
-                .sumAmountInByUserAndDateRange(userId, range.start(), range.end()));
-        var totalOut = coalesce(transactionRepository
-                .sumAmountOutByUserAndDateRange(userId, range.start(), range.end()));
-
-        var breakdown = buildCategoryBreakdown(userId, range, totalOut);
-
-        log.info("monthly_summary_fetched userId={} year={} month={} in={} out={}",
-                userId, year, month, totalIn, totalOut);
-
-        return new BankingDTO.MonthlySummaryResponse(
-                year, month, totalIn, totalOut,
-                totalIn.subtract(totalOut),
-                breakdown);
+        } catch (Exception ex) {
+            log.error("monthly_summary_failed userId={} year={} month={} error={}",
+                    userId, year, month, ex.getMessage(), ex);
+            throw new BankingException("REPORT_FETCH_ERROR",
+                    "Không thể lấy báo cáo tháng", ex);
+        }
     }
 
     @Transactional(readOnly = true)
