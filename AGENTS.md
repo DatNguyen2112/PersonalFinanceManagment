@@ -2,64 +2,80 @@
 name: sepay-personal-finance
 description: >
   Hướng dẫn implement module Quản lý Tài chính Cá nhân (Personal Finance Management)
-  tích hợp SePay Open API trong hệ thống Spring Boot Banking có sẵn (JWT, Kafka,
-  MySQL, JPA). Thay thế mô hình liên kết trực tiếp ngân hàng bằng cách kéo giao dịch
-  qua SePay — bao gồm Pull API (polling) + Webhook nhận giao dịch real-time, tự động
-  phân loại chi tiêu, thống kê theo danh mục, báo cáo tài chính — theo đúng convention
-  dự án (BankingDTO pattern, @Slf4j, Testcontainers, v.v.).
+  tích hợp SePay Open API (Pull API + Webhook) + SePay Bank Hub trong hệ thống 
+  Spring Boot Banking có sẵn (JWT, Kafka, MySQL, JPA). Hỗ trợ hai flow liên kết 
+  ngân hàng: Bank Hub (hosted) + Manual Add. Bao gồm tự động phân loại chi tiêu,
+  thống kê theo danh mục, báo cáo tài chính, ngân sách — theo đúng convention dự án
+  (BankingDTO pattern, @Slf4j, @Transactional, MapStruct).
 
   Kích hoạt skill này khi người dùng đề cập đến: SePay, sepay api, tích hợp sepay,
-  quản lý tài chính cá nhân, personal finance, budget, ngân sách, expense tracking,
-  chi tiêu, savings goal, mục tiêu tiết kiệm, financial report, báo cáo tài chính,
-  spending category, danh mục chi tiêu, webhook giao dịch, biến động số dư, đồng bộ
-  giao dịch ngân hàng — trong ngữ cảnh dự án banking Spring Boot này.
+  Bank Hub, liên kết ngân hàng, quản lý tài chính cá nhân, personal finance, budget,
+  ngân sách, expense tracking, chi tiêu, financial report, báo cáo tài chính,
+  spending category, danh mục chi tiêu, webhook giao dịch, đồng bộ giao dịch,
+  hosted link.
 ---
 
 # SePay Personal Finance — Banking System Extension
 
-Module **Quản lý Tài chính Cá nhân qua SePay Open API** — không yêu cầu user liên kết
-trực tiếp với ngân hàng. Thay vào đó, user liên kết tài khoản ngân hàng vào SePay
-(qua OTP, an toàn), rồi hệ thống nhận giao dịch qua **SePay API** (pull) và
-**SePay Webhook** (push real-time).
+Module **Quản lý Tài chính Cá nhân qua SePay** hỗ trợ hai flow chính:
+
+1. **Bank Hub (Recommended)** — User liên kết qua hosted link tại SePay (an toàn, OTP)
+2. **Manual Add** — User nhập số tài khoản thủ công (fallback)
+
+Cả hai flow đều kéo giao dịch qua **SePay API** (Pull) + **Webhook** (Push real-time),
+tự động phân loại chi tiêu, báo cáo ngân sách.
 
 ---
 
 ## 1. Tổng quan kiến trúc
 
+### 1.1 Hai Flow Liên kết Ngân hàng
+
 ```
-                    ┌──────────────────────────────────────────┐
-                    │              SePay Platform               │
-                    │  (User liên kết ngân hàng tại SePay)     │
-                    └────────────┬─────────────────────────────┘
-                                 │
-              ┌──────────────────┼──────────────────┐
-              │                  │                  │
-    REST Pull API          Webhook Push         SePay Dashboard
-  (Scheduled Sync)      (Real-time notify)    (my.sepay.vn)
-              │                  │
-              ▼                  ▼
-   ┌──────────────────────────────────────┐
-   │          Spring Boot Application     │
-   │                                      │
-   │  SepayApiClient ──► SyncService      │
-   │  SepayWebhookController ──► same     │
-   │                      │               │
-   │              TransactionService      │
-   │                      │               │
-   │         ┌────────────┼────────────┐  │
-   │         ▼            ▼            ▼  │
-   │   CategoryService  BudgetService  │  │
-   │   (auto-classify) (track limits)  │  │
-   │                      │            │  │
-   │              Kafka: banking.sepay  │  │
-   └──────────────────────────────────────┘
+                 ┌─────────────────────────────────────┐
+                 │     1. Bank Hub Flow (Recommended)  │
+                 │  User → Hosted Link → SePay Bank    │
+                 │         Token → Callback → DB       │
+                 └────────────┬────────────────────────┘
+                              │
+          ┌───────────────────┼────────────────────┐
+          │                   │                    │
+     SepayBankHubClient   SepayBankHubService   Webhook
+     (init-link)         (processWebhookEvent)
+          │                   │                    │
+          ▼                   ▼                    ▼
+    ┌──────────────────────────────────────────────────┐
+    │    2. Manual Add Flow (Fallback)                │
+    │  User → POST /bank-accounts → Direct Add → DB  │
+    └──────────────────┬───────────────────────────────┘
+                       │
+        ┌──────────────┼────────────────────┐
+        │              │                    │
+   SepayBankAccountService  Pull API    Webhook Push
+   (addAccount)        (Scheduled)     (Real-time)
+        │              │                    │
+        ▼              ▼                    ▼
+ ┌──────────────────────────────────────────────────┐
+ │         Spring Boot Application (DB)              │
+ │                                                   │
+ │  ┌─────────────────────────────────────────────┐ │
+ │  │  SepayApiClient ──► SyncService             │ │
+ │  │  SepayWebhookController ──► same            │ │
+ │  │  SepayBankHubController ──► BankHubService  │ │
+ │  │                         │                    │ │
+ │  │  PersonalFinanceService                     │ │
+ │  │   ├─ CategoryService (auto-classify)        │ │
+ │  │   └─ BudgetService (track limits)           │ │
+ │  │                         │                    │ │
+ │  │         Kafka: banking.sepay.*               │ │
+ │  └─────────────────────────────────────────────┘ │
+ └──────────────────────────────────────────────────┘
 ```
 
-**Ưu điểm so với liên kết trực tiếp ngân hàng:**
-- Không cần xử lý OAuth2 từng ngân hàng riêng lẻ
-- SePay đã hợp tác chính thức với ngân hàng (không bot/scraping)
-- Hỗ trợ hầu hết ngân hàng Việt Nam qua một đầu mối duy nhất
-- Rate limit SePay: 3 request/giây — cần throttle khi polling
+**Ưu điểm:**
+- **Bank Hub**: Hosted link (an toàn, OTP, user-friendly)
+- **Manual Add**: Fallback nếu Bank Hub không khả dụng
+- Rate limit: 3 req/s (Guava RateLimiter handle)
 
 ---
 
@@ -364,7 +380,7 @@ public class MonthlyBudget {
 ```java
 public enum SepayAccountStatus { ACTIVE, PAUSED, REMOVED }
 public enum TransactionDirection { IN, OUT }
-public enum SyncSource { WEBHOOK, PULL_API }
+public enum SyncSourceType { WEBHOOK, PULL_API }  // SyncSourceType (không phải SyncSource)
 ```
 
 ---
@@ -377,15 +393,24 @@ public enum SyncSource { WEBHOOK, PULL_API }
 sepay:
   api:
     base-url: https://my.sepay.vn/userapi
-    token: ${SEPAY_API_TOKEN}       # API Token từ my.sepay.vn
-    webhook-secret: ${SEPAY_WEBHOOK_SECRET}  # dùng để verify webhook
-    rate-limit-per-second: 3        # SePay giới hạn 3 req/s
+    token: ${SEPAY_API_TOKEN}              # API Token từ my.sepay.vn
+    webhook-secret: ${SEPAY_WEBHOOK_SECRET}  # Verify webhook signature
+    rate-limit-per-second: 3               # SePay giới hạn 3 req/s (Auto handle)
     sync:
-      cron: "0 */15 * * * *"        # Pull mỗi 15 phút
-      page-size: 100                # số GD mỗi lần pull
+      cron: "0 */15 * * * *"              # Pull mỗi 15 phút
+      page-size: 100                      # Số GD mỗi lần pull
+
+  # ── Bank Hub Configuration ──────────────────────────────────────────
+  bank-hub:
+    base-url: https://bankhub.sepay.vn
+    client-id: ${SEPAY_BANK_HUB_CLIENT_ID}
+    client-secret: ${SEPAY_BANK_HUB_CLIENT_SECRET}
+    webhook-secret: ${SEPAY_BANK_HUB_WEBHOOK_SECRET}
+    redirect-url: ${APP_BASE_URL}/api/v1/bank-hub/callback
+    timeout-seconds: 300                  # Expiry of hosted link token
 ```
 
-### 4.2 SepayProperties
+### 4.2 SepayProperties & SepayBankHubProperties
 
 ```java
 @ConfigurationProperties(prefix = "sepay.api")
@@ -399,9 +424,20 @@ public record SepayProperties(
 ) {
     public record SyncConfig(String cron, int pageSize) {}
 }
+
+@ConfigurationProperties(prefix = "sepay.bank-hub")
+@Validated
+public record SepayBankHubProperties(
+    @NotBlank String baseUrl,
+    @NotBlank String clientId,
+    @NotBlank String clientSecret,
+    @NotBlank String webhookSecret,
+    @NotBlank String redirectUrl,
+    int timeoutSeconds
+) {}
 ```
 
-### 4.3 SepayApiClient (RestClient + rate limiter)
+### 4.3 SepayApiClient (RestClient + RateLimiter)
 
 ```java
 @Component
@@ -411,42 +447,69 @@ public class SepayApiClient {
 
     private final SepayProperties props;
     private final RestClient restClient;
-    private final RateLimiter rateLimiter;  // Guava RateLimiter
+    private final RateLimiter rateLimiter;  // Guava RateLimiter (injected)
 
-    @Bean
-    static RateLimiter sepayRateLimiter(SepayProperties props) {
-        return RateLimiter.create(props.rateLimitPerSecond());
-    }
-
-    public SepayTransactionListResponse listTransactions(SepayListRequest req) {
+    // RateLimiter được cấu hình trong SepayConfig
+    
+    public SepayTransactionListResponse listTransactions(BankingDTO.SepayListRequest req) {
         rateLimiter.acquire();
         log.info("sepay_pull account={} since_id={}", req.accountNumber(), req.sinceId());
-        return restClient.get()
-            .uri(uriBuilder -> uriBuilder
-                .path("/transactions/list")
-                .queryParamIfPresent("account_number", Optional.ofNullable(req.accountNumber()))
-                .queryParamIfPresent("since_id", Optional.ofNullable(req.sinceId()))
-                .queryParamIfPresent("limit", Optional.of(req.limit()))
-                .queryParamIfPresent("transaction_date_min",
-                    Optional.ofNullable(req.dateMin()).map(Object::toString))
-                .queryParamIfPresent("transaction_date_max",
-                    Optional.ofNullable(req.dateMax()).map(Object::toString))
-                .build())
-            .header("Authorization", "Apikey " + props.token())
-            .retrieve()
-            .onStatus(HttpStatusCode::is4xxClientError, (request, response) -> {
-                throw new SepayApiException("SePay 4xx: " + response.getStatusCode());
-            })
-            .body(SepayTransactionListResponse.class);
+        // ... chi tiết tương tự như AGENTS.md gốc
     }
 
     public SepayTransactionDetailResponse getTransaction(Long sepayId) {
         rateLimiter.acquire();
+        // ... chi tiết tương tự như AGENTS.md gốc
+    }
+}
+```
+
+### 4.4 SepayBankHubClient (Hosted Link Management)
+
+```java
+@Component
+@Slf4j
+@RequiredArgsConstructor
+public class SepayBankHubClient {
+
+    private final SepayBankHubProperties props;
+    private final RestClient restClient;
+
+    /**
+     * Khởi tạo hosted link để user liên kết tài khoản ngân hàng.
+     * Trả về hostedLinkUrl mà frontend sẽ navigate.
+     */
+    public SepayBankHub.BankHubInitResponse initLink(
+            Long userId, String redirectUrl) {
+        // POST to SePay Bank Hub
+        // Request: { "userId": "...", "redirectUrl": "..." }
+        // Response: { "hostedLinkUrl": "https://...", "linkTokenXid": "..." }
+        log.info("bank_hub_init_link userId={}", userId);
+        // ... returns hostedLinkUrl
+    }
+
+    /**
+     * Khởi tạo hủy liên kết tài khoản.
+     */
+    public SepayBankHub.BankHubInitResponse initUnlink(
+            String bankAccountXid) {
+        // POST to SePay Bank Hub unlink endpoint
+        log.info("bank_hub_init_unlink bankAccountXid={}", bankAccountXid);
+        // ...
+    }
+
+    /**
+     * Lấy danh sách tài khoản ngân hàng đã liên kết ở SePay Bank Hub
+     * (dùng để sync về DB).
+     */
+    public List<SepayBankHub.LinkedBankAccount> getLinkedAccounts(String token) {
+        // GET /linked-accounts with token
+        log.info("bank_hub_get_linked_accounts");
         return restClient.get()
-            .uri("/transactions/details/{id}", sepayId)
-            .header("Authorization", "Apikey " + props.token())
+            .uri("/linked-accounts")
+            .header("Authorization", "Bearer " + token)
             .retrieve()
-            .body(SepayTransactionDetailResponse.class);
+            .body(new ParameterizedTypeReference<List<SepayBankHub.LinkedBankAccount>>() {});
     }
 }
 ```
@@ -508,6 +571,45 @@ public record SepayWebhookPayload(
     @JsonProperty("referenceCode") String referenceCode,
     String description
 ) {}
+
+// ── Bank Hub DTOs (NEW) ─────────────────────────────────────────────────────
+
+public class SepayBankHub {
+    public record BankHubInitResponse(
+        String hostedLinkUrl,
+        String linkTokenXid,
+        long expiresAt
+    ) {}
+
+    public record BankHubUnlinkRequest(
+        @NotBlank String bankAccountXid
+    ) {}
+
+    public record BankHubWebhookPayload(
+        String event,                  // "account.linked", "account.unlinked", etc
+        String linkTokenXid,
+        String bankAccountXid,
+        String accountNumber,
+        String bankBrandName,
+        String accountName,
+        @JsonProperty("updatedAt") String updatedAt
+    ) {}
+
+    public record LinkedBankAccount(
+        String bankAccountXid,
+        String accountNumber,
+        String bankBrandName,
+        String accountName,
+        String lastSyncAt
+    ) {}
+
+    public record BankHubBankAccountItem(
+        String id,
+        String name,
+        String code,
+        String logo
+    ) {}
+}
 
 // ── Application-level DTOs ─────────────────────────────────────────────────
 
@@ -596,7 +698,114 @@ public record MonthlySummaryResponse(
 
 ## 6. Services
 
-### 6.1 SepayTransactionSyncService — Pull API
+### 6.1 SepayBankHubService — Hosted Link Management
+
+```java
+@Service @Slf4j @RequiredArgsConstructor
+public class SepayBankHubService {
+
+    private final SepayBankHubClient bankHubClient;
+    private final SepayBankAccountService bankAccountService;
+    private final SepayBankAccountRepository bankAccountRepository;
+    private final SepayBankHubProperties props;
+    private final KafkaProducerService kafkaProducerService;
+
+    /**
+     * Khởi tạo hosted link để user liên kết tài khoản ngân hàng.
+     * Frontend sẽ navigate đến hostedLinkUrl.
+     */
+    @Transactional
+    public SepayBankHub.BankHubInitResponse initLinkAccount(Long userId) {
+        try {
+            var redirectUrl = props.redirectUrl() + "?userId=" + userId;
+            var response = bankHubClient.initLink(userId, redirectUrl);
+            log.info("bank_hub_link_initiated userId={} linkTokenXid={}",
+                userId, response.linkTokenXid());
+            return response;
+        } catch (Exception ex) {
+            log.error("bank_hub_init_failed userId={}", userId, ex);
+            throw new BankingException("BANK_HUB_INIT_ERROR",
+                "Không thể khởi tạo liên kết tài khoản", ex);
+        }
+    }
+
+    /**
+     * Khởi tạo hủy liên kết tài khoản.
+     */
+    @Transactional
+    public SepayBankHub.BankHubInitResponse initUnlinkAccount(
+            Long userId, String bankAccountXid) {
+        try {
+            var response = bankHubClient.initUnlink(bankAccountXid);
+            log.info("bank_hub_unlink_initiated userId={} xid={}", userId, bankAccountXid);
+            return response;
+        } catch (Exception ex) {
+            log.error("bank_hub_unlink_init_failed userId={}", userId, ex);
+            throw new BankingException("BANK_HUB_UNLINK_ERROR",
+                "Không thể khởi tạo hủy liên kết", ex);
+        }
+    }
+
+    /**
+     * Xử lý webhook từ SePay Bank Hub khi user hoàn thành liên kết.
+     * Event: "account.linked", "account.unlinked", etc.
+     */
+    @Transactional
+    public void processWebhookEvent(SepayBankHub.BankHubWebhookPayload payload) {
+        try {
+            switch (payload.event()) {
+                case "account.linked" -> syncNewLinkedAccount(payload);
+                case "account.unlinked" -> removeLinkedAccount(payload);
+                default -> log.info("bank_hub_webhook_unknown_event {}", payload.event());
+            }
+        } catch (Exception ex) {
+            log.error("bank_hub_webhook_processing_failed event={}", payload.event(), ex);
+        }
+    }
+
+    private void syncNewLinkedAccount(SepayBankHub.BankHubWebhookPayload payload) {
+        // Lấy user từ token hoặc stored session — cần enhance
+        // Tạm thời skip; trong thực tế sẽ cần lưu userIdFromSession trong cache khóa bởi linkTokenXid
+        log.info("bank_hub_account_linked xid={} accountNumber={}",
+            payload.bankAccountXid(), payload.accountNumber());
+
+        // Tạo SepayAccount trong DB nếu chưa tồn tại
+        // bankAccountService.addAccountFromBankHub(userId, payload);
+    }
+
+    private void removeLinkedAccount(SepayBankHub.BankHubWebhookPayload payload) {
+        log.info("bank_hub_account_unlinked xid={}", payload.bankAccountXid());
+        // Đánh dấu account là REMOVED trong DB
+        bankAccountRepository.findByAccountNumber(payload.accountNumber())
+            .ifPresent(acc -> {
+                acc.setStatus(SepayAccountStatus.REMOVED);
+                bankAccountRepository.save(acc);
+            });
+    }
+
+    /**
+     * Sync thủ công các tài khoản đã liên kết thành công qua Bank Hub.
+     * Gọi khi user thoát khỏi hosted link hoặc manual trigger.
+     */
+    @Transactional
+    public int syncLinkedAccountsFromBankHub(Long userId) {
+        try {
+            // Cần lấy token từ Bank Hub API
+            // var token = bankHubClient.getAccessToken(userId);
+            // var linkedAccounts = bankHubClient.getLinkedAccounts(token);
+            
+            // Tạm thời return 0
+            log.info("bank_hub_manual_sync userId={}", userId);
+            return 0;
+        } catch (Exception ex) {
+            log.error("bank_hub_sync_failed userId={}", userId, ex);
+            return 0;
+        }
+    }
+}
+```
+
+### 6.2 SepayTransactionSyncService — Pull API (Scheduled)
 
 ```java
 @Service @Slf4j @RequiredArgsConstructor
@@ -606,7 +815,7 @@ public class SepayTransactionSyncService {
     private final SepayBankAccountRepository bankAccountRepository;
     private final SepayTransactionRepository transactionRepository;
     private final SpendingCategoryService categoryService;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final KafkaProducerService kafkaProducerService;
 
     @Scheduled(cron = "${sepay.api.sync.cron}")
     public void scheduledSync() {
@@ -616,9 +825,10 @@ public class SepayTransactionSyncService {
         log.info("sepay_scheduled_sync_done");
     }
 
-    public void syncAccount(SepayBankAccount account) {
+    @Transactional
+    public void syncAccount(SepayAccount account) {
         try {
-            var req = new SepayListRequest(
+            var req = new BankingDTO.SepayListRequest(
                 account.getAccountNumber(),
                 account.getLastSyncedTransactionId(),  // incremental via since_id
                 100,
@@ -640,7 +850,7 @@ public class SepayTransactionSyncService {
 
             // Cập nhật con trỏ incremental
             response.transactions().stream()
-                .mapToLong(SepayTransactionItem::id)
+                .mapToLong(BankingDTO.SepayTransactionItem::id)
                 .max()
                 .ifPresent(maxId -> {
                     account.setLastSyncedTransactionId(maxId);
@@ -651,21 +861,21 @@ public class SepayTransactionSyncService {
             log.info("sepay_sync_done account={} new_tx_count={}",
                 account.getAccountNumber(), newTxs.size());
 
-            // Kafka event cho downstream (notification, budget check…)
+            // Kafka event
             if (!newTxs.isEmpty()) {
-                kafkaTemplate.send("banking.sepay.sync",
-                    account.getUser().getId().toString(),
-                    new SepaySyncEvent(account.getId(), newTxs.size()));
+                kafkaProducerService.sendSepaySyncEvent(account.getUser().getId(),
+                    account.getId(), newTxs.size());
             }
 
-        } catch (SepayApiException ex) {
+        } catch (Exception ex) {
             log.error("sepay_sync_failed account={}", account.getAccountNumber(), ex);
         }
     }
 
-    private SepayTransaction mapToEntity(SepayTransactionItem item,
-                                         SepayBankAccount account) {
-        var direction = item.amountIn().compareTo(BigDecimal.ZERO) > 0
+    private SepayTransaction mapToEntity(BankingDTO.SepayTransactionItem item,
+                                         SepayAccount account) {
+        var direction = item.amountIn() != null 
+            && item.amountIn().compareTo(BigDecimal.ZERO) > 0
             ? TransactionDirection.IN
             : TransactionDirection.OUT;
 
@@ -678,16 +888,16 @@ public class SepayTransactionSyncService {
             .accountNumber(item.accountNumber())
             .bankBrandName(item.bankBrandName())
             .transactionDate(parseDate(item.transactionDate()))
-            .amountIn(item.amountIn())
-            .amountOut(item.amountOut())
-            .accumulated(item.accumulated())
+            .amountIn(item.amountIn() != null ? item.amountIn() : BigDecimal.ZERO)
+            .amountOut(item.amountOut() != null ? item.amountOut() : BigDecimal.ZERO)
+            .accumulated(item.accumulated() != null ? item.accumulated() : BigDecimal.ZERO)
             .transactionContent(item.transactionContent())
             .referenceNumber(item.referenceNumber())
             .code(item.code())
             .subAccount(item.subAccount())
             .direction(direction)
             .category(category)
-            .source(SyncSource.PULL_API)
+            .source(SyncSourceType.PULL_API)
             .build();
     }
 
@@ -698,7 +908,7 @@ public class SepayTransactionSyncService {
 }
 ```
 
-### 6.2 SpendingCategoryService — Auto-classify
+### 6.3 SpendingCategoryService — Auto-classify
 
 ```java
 @Service @Slf4j @RequiredArgsConstructor
@@ -708,157 +918,35 @@ public class SpendingCategoryService {
 
     /**
      * Phân loại giao dịch dựa trên keyword trong nội dung.
-     * Priority: user-defined > system categories.
      * Trả về null nếu không khớp (để UI hiển thị "Khác").
      */
     public SpendingCategory autoClassify(String content) {
         if (content == null) return null;
         String lower = content.toLowerCase();
 
-        return categoryRepository.findAllWithKeywords().stream()
-            .filter(cat -> cat.getKeywords().stream()
+        return categoryRepository.findAll().stream()
+            .filter(cat -> cat.getKeywords() != null && cat.getKeywords().stream()
                 .anyMatch(kw -> lower.contains(kw.toLowerCase())))
             .findFirst()
             .orElse(null);
     }
 
-    public List<SpendingCategory> getSystemCategories() {
-        return categoryRepository.findBySystemTrue();
+    public List<SpendingCategory> getSystemCategories(Long userId) {
+        // Trả về system categories + user-defined nếu có
+        return categoryRepository.findBySystemOrUserId(true, userId);
     }
 }
 ```
 
-### 6.3 PersonalFinanceService — Budget & Reports
+### 6.4 PersonalFinanceService — Budget & Reports
 
-```java
-@Service @Slf4j @RequiredArgsConstructor
-public class PersonalFinanceService {
-
-    private final SepayTransactionRepository transactionRepository;
-    private final MonthlyBudgetRepository budgetRepository;
-    private final SpendingCategoryRepository categoryRepository;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
-
-    // ── Budget ─────────────────────────────────────────────────────────────
-
-    public BankingDTO.BudgetStatusResponse createOrUpdateBudget(
-            Long userId, BankingDTO.BudgetRequest req) {
-
-        var category = req.categoryId() != null
-            ? categoryRepository.findById(req.categoryId()).orElseThrow(
-                () -> new EntityNotFoundException("Category not found"))
-            : null;
-
-        var budget = budgetRepository
-            .findByUserIdAndCategoryIdAndYearAndMonth(
-                userId, req.categoryId(), req.year(), req.month())
-            .orElse(MonthlyBudget.builder()
-                .user(User.builder().id(userId).build())
-                .category(category)
-                .year(req.year())
-                .month(req.month())
-                .build());
-
-        budget.setLimitAmount(req.limitAmount());
-        budget.setAlertThreshold(req.alertThreshold());
-        budgetRepository.save(budget);
-
-        return buildBudgetStatus(budget, userId);
-    }
-
-    public BankingDTO.BudgetStatusResponse getBudgetStatus(
-            Long userId, Long categoryId, int year, int month) {
-
-        var budget = budgetRepository
-            .findByUserIdAndCategoryIdAndYearAndMonth(userId, categoryId, year, month)
-            .orElseThrow(() -> new EntityNotFoundException("Budget not found"));
-
-        return buildBudgetStatus(budget, userId);
-    }
-
-    private BankingDTO.BudgetStatusResponse buildBudgetStatus(
-            MonthlyBudget budget, Long userId) {
-
-        var start = LocalDateTime.of(budget.getYear(), budget.getMonth(), 1, 0, 0);
-        var end   = start.plusMonths(1);
-
-        BigDecimal spent = budget.getCategory() == null
-            ? transactionRepository.sumAmountOutByUserAndDateRange(userId, start, end)
-            : transactionRepository.sumAmountOutByUserAndCategoryAndDateRange(
-                userId, budget.getCategory().getId(), start, end);
-
-        if (spent == null) spent = BigDecimal.ZERO;
-
-        int usagePercent = budget.getLimitAmount().compareTo(BigDecimal.ZERO) > 0
-            ? spent.multiply(BigDecimal.valueOf(100))
-                   .divide(budget.getLimitAmount(), 0, RoundingMode.HALF_UP)
-                   .intValue()
-            : 0;
-
-        boolean alert = usagePercent >= budget.getAlertThreshold();
-
-        if (alert) {
-            kafkaTemplate.send("banking.sepay.budget-alert", userId.toString(),
-                new BudgetAlertEvent(budget.getId(), usagePercent));
-        }
-
-        return new BankingDTO.BudgetStatusResponse(
-            budget.getId(),
-            budget.getCategory() != null ? budget.getCategory().getName() : "Tổng",
-            budget.getYear(),
-            budget.getMonth(),
-            budget.getLimitAmount(),
-            spent,
-            budget.getLimitAmount().subtract(spent),
-            usagePercent,
-            alert
-        );
-    }
-
-    // ── Reports ────────────────────────────────────────────────────────────
-
-    public BankingDTO.MonthlySummaryResponse getMonthlySummary(
-            Long userId, int year, int month) {
-
-        var start = LocalDateTime.of(year, month, 1, 0, 0);
-        var end   = start.plusMonths(1);
-
-        BigDecimal totalIn  = coalesce(
-            transactionRepository.sumAmountInByUserAndDateRange(userId, start, end));
-        BigDecimal totalOut = coalesce(
-            transactionRepository.sumAmountOutByUserAndDateRange(userId, start, end));
-
-        List<Object[]> rows = transactionRepository
-            .sumOutByCategoryAndDateRange(userId, start, end);
-
-        List<BankingDTO.MonthlySummaryResponse.CategoryBreakdown> breakdown =
-            rows.stream().map(r -> {
-                String catName = r[0] != null ? (String) r[0] : "Khác";
-                String color   = r[1] != null ? (String) r[1] : "#999999";
-                BigDecimal amt = (BigDecimal) r[2];
-                int count      = ((Number) r[3]).intValue();
-                int share = totalOut.compareTo(BigDecimal.ZERO) > 0
-                    ? amt.multiply(BigDecimal.valueOf(100))
-                         .divide(totalOut, 0, RoundingMode.HALF_UP).intValue()
-                    : 0;
-                return new BankingDTO.MonthlySummaryResponse.CategoryBreakdown(
-                    catName, color, amt, count, share);
-            }).toList();
-
-        return new BankingDTO.MonthlySummaryResponse(
-            year, month, totalIn, totalOut,
-            totalIn.subtract(totalOut), breakdown);
-    }
-
-    private BigDecimal coalesce(BigDecimal value) {
-        return value != null ? value : BigDecimal.ZERO;
-    }
-}
-```
+_(Chi tiết đầy đủ trong PersonalFinanceService.java — xem codebase hiện tại)_
 
 ---
 
-## 7. Webhook Controller
+## 7. Controllers
+
+### 7.1 SepayWebhookController — Transaction Webhook
 
 ```java
 @RestController
@@ -872,14 +960,14 @@ public class SepayWebhookController {
 
     /**
      * SePay gọi vào endpoint này khi có giao dịch mới.
-     * Xác thực qua header Authorization: Apikey {WEBHOOK_SECRET}
+     * Xác thực qua Apikey header.
      */
     @PostMapping("/webhook")
     public ResponseEntity<Map<String, Object>> receiveWebhook(
             @RequestBody BankingDTO.SepayWebhookPayload payload,
             @RequestHeader(value = "Authorization", required = false) String auth) {
 
-        if (!isValidWebhookAuth(auth)) {
+        if (!isValidAuth(auth)) {
             log.warn("sepay_webhook_unauthorized");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(Map.of("success", false, "message", "Unauthorized"));
@@ -889,97 +977,90 @@ public class SepayWebhookController {
             payload.accountNumber(), payload.amountIn(), payload.amountOut());
 
         webhookService.process(payload);
-
         return ResponseEntity.ok(Map.of("success", true));
     }
 
-    private boolean isValidWebhookAuth(String auth) {
+    private boolean isValidAuth(String auth) {
         return ("Apikey " + props.webhookSecret()).equals(auth);
     }
 }
 ```
 
-### 7.1 SepayWebhookService
+### 7.2 SepayBankHubController — Bank Hub Link Management
 
 ```java
-@Service @Slf4j @RequiredArgsConstructor
-public class SepayWebhookService {
+@RestController
+@RequestMapping("/api/v1/bank-hub")
+@RequiredArgsConstructor
+@Slf4j
+public class SepayBankHubController {
 
-    private final SepayTransactionRepository transactionRepository;
-    private final SepayBankAccountRepository bankAccountRepository;
-    private final SpendingCategoryService categoryService;
-    private final PersonalFinanceService financeService;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final SepayBankHubService bankHubService;
+    private final SepayBankHubProperties props;
 
-    @Transactional
-    public void process(BankingDTO.SepayWebhookPayload payload) {
-        // Idempotency — tránh xử lý duplicate
-        // SePay webhook không trả về id, dùng referenceCode làm dedup key
-        if (transactionRepository.existsByReferenceNumber(payload.referenceCode())) {
-            log.info("sepay_webhook_duplicate ref={}", payload.referenceCode());
-            return;
+    // ── Khởi tạo liên kết — frontend gọi để lấy hostedLinkUrl ────────────
+
+    @PostMapping("/init-link")
+    public ResponseEntity<SepayBankHub.BankHubInitResponse> initLink(
+            @AuthenticationPrincipal UserDetailsImpl.BankingUserDetails u) {
+        return ResponseEntity.ok(bankHubService.initLinkAccount(u.getUserId()));
+    }
+
+    // ── Khởi tạo hủy liên kết ─────────────────────────────────────────────
+
+    @PostMapping("/init-unlink")
+    public ResponseEntity<SepayBankHub.BankHubInitResponse> initUnlink(
+            @Valid @RequestBody SepayBankHub.BankHubUnlinkRequest req,
+            @AuthenticationPrincipal UserDetailsImpl.BankingUserDetails u) {
+        return ResponseEntity.ok(
+                bankHubService.initUnlinkAccount(u.getUserId(), req.bankAccountXid()));
+    }
+
+    // ── Callback — SePay redirect về sau khi user hoàn thành ──────────────
+
+    @GetMapping("/callback")
+    public ResponseEntity<Map<String, String>> callback(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String link_token_xid) {
+        log.info("bank_hub_callback status={} linkTokenXid={}", status, link_token_xid);
+        return ResponseEntity.ok(Map.of(
+                "status", status != null ? status : "completed",
+                "message", "Liên kết ngân hàng hoàn tất."));
+    }
+
+    // ── Webhook — SePay Bank Hub gọi vào khi có sự kiện liên kết ─────────
+
+    @PostMapping("/webhook")
+    public ResponseEntity<Map<String, Object>> receiveWebhook(
+            @RequestBody SepayBankHub.BankHubWebhookPayload payload,
+            @RequestHeader(value = "Authorization", required = false) String auth) {
+
+        if (!isValidAuth(auth)) {
+            log.warn("bank_hub_webhook_unauthorized");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("success", false));
         }
 
-        var account = bankAccountRepository
-            .findByAccountNumber(payload.accountNumber())
-            .orElseGet(() -> {
-                // Tài khoản chưa được đăng ký trong hệ thống — bỏ qua
-                log.warn("sepay_webhook_unknown_account account={}",
-                    payload.accountNumber());
-                return null;
-            });
-
-        if (account == null) return;
-
-        var direction = payload.amountIn() != null
-            && payload.amountIn().compareTo(BigDecimal.ZERO) > 0
-            ? TransactionDirection.IN : TransactionDirection.OUT;
-
-        var category = categoryService.autoClassify(payload.content());
-
-        var tx = SepayTransaction.builder()
-            .sepayId(null)                  // webhook không trả sepay id
-            .user(account.getUser())
-            .sepayBankAccount(account)
-            .accountNumber(payload.accountNumber())
-            .bankBrandName(payload.gateway())
-            .transactionDate(parseDate(payload.transactionDate()))
-            .amountIn(coalesce(payload.amountIn()))
-            .amountOut(coalesce(payload.amountOut()))
-            .accumulated(coalesce(payload.accumulated()))
-            .transactionContent(payload.content())
-            .referenceNumber(payload.referenceCode())
-            .code(payload.code())
-            .subAccount(payload.subAccount())
-            .direction(direction)
-            .category(category)
-            .source(SyncSource.WEBHOOK)
-            .build();
-
-        transactionRepository.save(tx);
-        log.info("sepay_webhook_saved account={} direction={} amount={}",
-            payload.accountNumber(), direction,
-            direction == TransactionDirection.IN ? payload.amountIn() : payload.amountOut());
-
-        kafkaTemplate.send("banking.sepay.transaction",
-            account.getUser().getId().toString(),
-            new SepayTransactionEvent(tx.getId(), direction.name()));
+        bankHubService.processWebhookEvent(payload);
+        return ResponseEntity.ok(Map.of("success", true));
     }
 
-    private LocalDateTime parseDate(String raw) {
-        return LocalDateTime.parse(raw,
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+    // ── Sync thủ công ──────────────────────────────────────────────────────
+
+    @PostMapping("/sync")
+    public ResponseEntity<Map<String, Object>> sync(
+            @AuthenticationPrincipal UserDetailsImpl.BankingUserDetails u) {
+        int synced = bankHubService.syncLinkedAccountsFromBankHub(u.getUserId());
+        return ResponseEntity.ok(Map.of("synced", synced));
     }
 
-    private BigDecimal coalesce(BigDecimal v) {
-        return v != null ? v : BigDecimal.ZERO;
+    private boolean isValidAuth(String auth) {
+        return ("Apikey " + props.webhookSecret()).equals(auth);
     }
 }
 ```
 
----
-
-## 8. Personal Finance Controller
+### 7.3 PersonalFinanceController — Transactions, Budget & Reports
 
 ```java
 @RestController
@@ -992,6 +1073,7 @@ public class PersonalFinanceController {
     private final SepayTransactionSyncService syncService;
     private final PersonalFinanceService financeService;
     private final SpendingCategoryService categoryService;
+    private final SepayBankHubService bankHubService;
 
     // ── Tài khoản ngân hàng ────────────────────────────────────────────────
 
@@ -1000,7 +1082,7 @@ public class PersonalFinanceController {
             @Valid @RequestBody BankingDTO.AddBankAccountRequest req,
             @AuthenticationPrincipal UserDetailsImpl.BankingUserDetails u) {
         return ResponseEntity.status(HttpStatus.CREATED)
-            .body(bankAccountService.addAccount(u.getUserId(), req));
+                .body(bankAccountService.addAccount(u.getUserId(), req));
     }
 
     @GetMapping("/bank-accounts")
@@ -1025,7 +1107,7 @@ public class PersonalFinanceController {
             @Valid BankingDTO.TransactionQueryRequest req,
             @AuthenticationPrincipal UserDetailsImpl.BankingUserDetails u) {
         return ResponseEntity.ok(
-            financeService.getTransactions(u.getUserId(), req));
+                financeService.getTransactions(u.getUserId(), req));
     }
 
     @PatchMapping("/transactions/{id}/category")
@@ -1034,7 +1116,7 @@ public class PersonalFinanceController {
             @RequestParam Long categoryId,
             @AuthenticationPrincipal UserDetailsImpl.BankingUserDetails u) {
         return ResponseEntity.ok(
-            financeService.updateCategory(id, categoryId, u.getUserId()));
+                financeService.updateCategory(id, categoryId, u.getUserId()));
     }
 
     // ── Danh mục ───────────────────────────────────────────────────────────
@@ -1042,7 +1124,7 @@ public class PersonalFinanceController {
     @GetMapping("/categories")
     public ResponseEntity<List<SpendingCategory>> getCategories(
             @AuthenticationPrincipal UserDetailsImpl.BankingUserDetails u) {
-        return ResponseEntity.ok(categoryService.getCategories(u.getUserId()));
+        return ResponseEntity.ok(categoryService.getSystemCategories(u.getUserId()));
     }
 
     // ── Ngân sách ──────────────────────────────────────────────────────────
@@ -1052,7 +1134,7 @@ public class PersonalFinanceController {
             @Valid @RequestBody BankingDTO.BudgetRequest req,
             @AuthenticationPrincipal UserDetailsImpl.BankingUserDetails u) {
         return ResponseEntity.status(HttpStatus.CREATED)
-            .body(financeService.createOrUpdateBudget(u.getUserId(), req));
+                .body(financeService.createOrUpdateBudget(u.getUserId(), req));
     }
 
     @GetMapping("/budgets")
@@ -1081,7 +1163,7 @@ public class PersonalFinanceController {
 
 ---
 
-## 9. Repositories (JPQL chính)
+## 8. Repositories (JPQL chính)
 
 ```java
 public interface SepayTransactionRepository
@@ -1148,12 +1230,27 @@ public interface SepayTransactionRepository
 
 ---
 
-## 10. Kafka Events & Topics
+## 9. Kafka Events & Topics
 
 ```java
 public record SepayTransactionEvent(Long transactionId, String direction) {}
 public record SepaySyncEvent(Long bankAccountId, int newTransactionCount) {}
 public record BudgetAlertEvent(Long budgetId, int usagePercent) {}
+
+// Producer service (KafkaProducerService.java)
+@Service @Slf4j @RequiredArgsConstructor
+public class KafkaProducerService {
+    private final KafkaTemplate<String, Object> kafkaTemplate;
+    
+    public void sendBudgetAlert(Long userId, BudgetAlertEvent event) {
+        kafkaTemplate.send("banking.sepay.budget-alert", userId.toString(), event);
+    }
+    
+    public void sendSepaySyncEvent(Long userId, Long bankAccountId, int count) {
+        kafkaTemplate.send("banking.sepay.sync", userId.toString(),
+            new SepaySyncEvent(bankAccountId, count));
+    }
+}
 ```
 
 ```properties
@@ -1165,19 +1262,22 @@ banking.kafka.topics.sepay-budget-alert=banking.sepay.budget-alert
 
 ---
 
-## 11. SecurityConfig
+## 10. SecurityConfig
 
 ```java
+// @EnableWebSecurity
 .requestMatchers("/api/v1/personal-finance/**").hasAnyRole("CUSTOMER", "ADMIN")
-.requestMatchers("/api/v1/sepay/webhook").permitAll()  // SePay gọi không có JWT
+.requestMatchers("/api/v1/bank-hub/**").hasAnyRole("CUSTOMER", "ADMIN")
+.requestMatchers("/api/v1/sepay/webhook").permitAll()      // SePay transaction webhook
+.requestMatchers("/api/v1/bank-hub/webhook").permitAll()   // Bank Hub webhook
+.requestMatchers("/api/v1/bank-hub/callback").permitAll()  // Hosted link callback
 ```
 
-> **Lưu ý bảo mật:** endpoint `/webhook` phải dùng `permitAll()` nhưng
-> được bảo vệ bởi **Apikey header** trong `SepayWebhookController`.
+> **Lưu ý:** Webhook endpoints (`.permitAll()`) được bảo vệ bằng **Apikey header** trong Controller.
 
 ---
 
-## 12. Data Seeder — System Categories
+## 11. Data Seeder — System Categories
 
 ```java
 @Component @RequiredArgsConstructor @Slf4j
@@ -1225,188 +1325,95 @@ public class SpendingCategorySeeder implements CommandLineRunner {
 
 ---
 
-## 13. Exception
+## 12. Custom Exceptions
 
 ```java
 public class SepayApiException extends RuntimeException {
     public SepayApiException(String message) { super(message); }
     public SepayApiException(String message, Throwable cause) { super(message, cause); }
 }
-```
 
----
-
-## 14. Testing Strategy
-
-### Unit Tests
-
-```java
-@ExtendWith(MockitoExtension.class)
-class SepayWebhookServiceTest {
-
-    @Mock SepayTransactionRepository transactionRepository;
-    @Mock SepayBankAccountRepository bankAccountRepository;
-    @Mock SpendingCategoryService categoryService;
-    @Mock KafkaTemplate<String, Object> kafkaTemplate;
-    @InjectMocks SepayWebhookService service;
-
-    @Test
-    void process_whenDuplicateReferenceCode_skipsProcessing() {
-        given(transactionRepository.existsByReferenceNumber("REF001")).willReturn(true);
-        service.process(buildPayload("REF001"));
-        then(transactionRepository).should(never()).save(any());
+public class BankingException extends RuntimeException {
+    private final String code;
+    public BankingException(String code, String message) {
+        super(message);
+        this.code = code;
     }
-
-    @Test
-    void process_whenUnknownAccount_skipsProcessing() {
-        given(transactionRepository.existsByReferenceNumber(any())).willReturn(false);
-        given(bankAccountRepository.findByAccountNumber(any())).willReturn(Optional.empty());
-        service.process(buildPayload("REF002"));
-        then(transactionRepository).should(never()).save(any());
-    }
-
-    @Test
-    void process_success_savesTransactionAndPublishesKafkaEvent() {
-        var account = mock(SepayBankAccount.class);
-        given(account.getUser()).willReturn(User.builder().id(1L).build());
-        given(transactionRepository.existsByReferenceNumber(any())).willReturn(false);
-        given(bankAccountRepository.findByAccountNumber(any()))
-            .willReturn(Optional.of(account));
-
-        service.process(buildPayload("REF003"));
-
-        then(transactionRepository).should().save(any(SepayTransaction.class));
-        then(kafkaTemplate).should().send(eq("banking.sepay.transaction"), any(), any());
-    }
-
-    private BankingDTO.SepayWebhookPayload buildPayload(String ref) {
-        return new BankingDTO.SepayWebhookPayload(
-            "Vietcombank", "2024-01-15 10:30:00", "0071000888888",
-            null, new BigDecimal("500000"), BigDecimal.ZERO,
-            new BigDecimal("5500000"), null,
-            "NGUYEN VAN A chuyen khoan", ref, null);
+    public BankingException(String code, String message, Throwable cause) {
+        super(message, cause);
+        this.code = code;
     }
 }
 
-@ExtendWith(MockitoExtension.class)
-class SpendingCategoryServiceTest {
-
-    @Mock SpendingCategoryRepository categoryRepository;
-    @InjectMocks SpendingCategoryService service;
-
-    @Test
-    void autoClassify_whenContentContainsGrab_returnsDiChuyenCategory() {
-        var diChuyen = SpendingCategory.builder().name("Di chuyển")
-            .keywords(List.of("grab", "taxi")).build();
-        given(categoryRepository.findAllWithKeywords()).willReturn(List.of(diChuyen));
-
-        var result = service.autoClassify("Grab - payment for ride");
-
-        assertThat(result).isNotNull();
-        assertThat(result.getName()).isEqualTo("Di chuyển");
-    }
-
-    @Test
-    void autoClassify_whenNoKeywordMatch_returnsNull() {
-        given(categoryRepository.findAllWithKeywords()).willReturn(List.of());
-        assertThat(service.autoClassify("unknown content")).isNull();
+public class BankAccountNotFoundException extends BankingException {
+    public BankAccountNotFoundException(String details) {
+        super("ACCOUNT_NOT_FOUND", "Bank account not found: " + details);
     }
 }
 
-@ExtendWith(MockitoExtension.class)
-class PersonalFinanceServiceTest {
-
-    @Mock SepayTransactionRepository transactionRepository;
-    @Mock MonthlyBudgetRepository budgetRepository;
-    @Mock SpendingCategoryRepository categoryRepository;
-    @Mock KafkaTemplate<String, Object> kafkaTemplate;
-    @InjectMocks PersonalFinanceService service;
-
-    @Test
-    void getBudgetStatus_whenUsageExceedsThreshold_firesKafkaAlert() {
-        var budget = MonthlyBudget.builder()
-            .id(1L).year(2024).month(1)
-            .limitAmount(new BigDecimal("1000000"))
-            .alertThreshold(80)
-            .build();
-        given(budgetRepository.findByUserIdAndCategoryIdAndYearAndMonth(any(), any(), any(), any()))
-            .willReturn(Optional.of(budget));
-        given(transactionRepository.sumAmountOutByUserAndDateRange(any(), any(), any()))
-            .willReturn(new BigDecimal("900000"));  // 90% → triggers alert
-
-        service.getBudgetStatus(1L, null, 2024, 1);
-
-        then(kafkaTemplate).should().send(eq("banking.sepay.budget-alert"), any(), any());
-    }
-}
-```
-
-### Integration Test với Testcontainers
-
-```java
-@SpringBootTest
-@Import(TestcontainersConfiguration.class)
-class PersonalFinanceIntegrationTest {
-
-    @Autowired PersonalFinanceController controller;
-    @Autowired SepayBankAccountRepository bankAccountRepository;
-
-    @Test
-    void fullFlow_addAccount_triggerSync_getReport() {
-        // 1. POST /api/v1/personal-finance/bank-accounts
-        // 2. POST /api/v1/personal-finance/bank-accounts/{id}/sync
-        //    (mock SepayApiClient hoặc dùng WireMock)
-        // 3. GET  /api/v1/personal-finance/reports/monthly → verify totalIn/Out
-    }
-
-    @Test
-    void webhook_receiveTransaction_classifiesAndSavesCorrently() {
-        // 1. Setup SepayBankAccount trong DB
-        // 2. POST /api/v1/sepay/webhook với payload hợp lệ
-        // 3. Verify transaction saved với đúng direction + category
-    }
-
-    @Test
-    void budget_createBudget_exceedThreshold_triggersAlert() {
-        // 1. Tạo budget 1,000,000 với alertThreshold=80
-        // 2. Insert transactions tổng 900,000 (90%)
-        // 3. GET /api/v1/personal-finance/budgets → alertTriggered = true
+public class BudgetNotFoundException extends BankingException {
+    public BudgetNotFoundException(Long categoryId, int year, int month) {
+        super("BUDGET_NOT_FOUND",
+            "Budget not found for categoryId=%s year=%d month=%d"
+                .formatted(categoryId, year, month));
     }
 }
 ```
 
 ---
 
-## 15. Checklist triển khai
+## 14. Checklist triển khai
 
-- [ ] Thêm `SEPAY_API_TOKEN` và `SEPAY_WEBHOOK_SECRET` vào `.env` / Vault
-- [ ] Thêm 4 Entity mới: `SepayBankAccount`, `SepayTransaction`, `SpendingCategory`, `MonthlyBudget`
-- [ ] Thêm 3 Enum mới: `SepayAccountStatus`, `TransactionDirection`, `SyncSource`
-- [ ] Thêm DTOs vào `BankingDTO.java` (SePay API + Webhook + Application DTOs)
-- [ ] Thêm `SepayProperties` với `@ConfigurationProperties`
-- [ ] Tạo `SepayApiClient` (RestClient + Guava RateLimiter — dep: `com.google.guava:guava`)
-- [ ] Tạo `SepayTransactionSyncService` với `@Scheduled`
-- [ ] Thêm `@EnableScheduling` vào main class
-- [ ] Tạo `SpendingCategoryService` (auto-classify bằng keyword)
-- [ ] Tạo `PersonalFinanceService` (budget + report)
-- [ ] Tạo `SepayWebhookService`
-- [ ] Tạo `SepayWebhookController` tại `/api/v1/sepay/webhook`
-- [ ] Tạo `PersonalFinanceController` tại `/api/v1/personal-finance`
-- [ ] Tạo `SepayBankAccountService`, `SepayBankAccountRepository`
-- [ ] Thêm JPQL queries vào `SepayTransactionRepository`
-- [ ] Cập nhật `SecurityConfig` (`/api/v1/personal-finance/**` và `/api/v1/sepay/webhook`)
-- [ ] Tạo `SpendingCategorySeeder`
-- [ ] Thêm 3 Kafka topics vào `application.properties`
-- [ ] Tạo `SepayApiException`
-- [ ] Đăng ký Webhook URL tại `my.sepay.vn` → Webhooks → Thêm webhook
+- [ ] Thêm env vars: `SEPAY_API_TOKEN`, `SEPAY_WEBHOOK_SECRET`, `SEPAY_BANK_HUB_CLIENT_ID`, `SEPAY_BANK_HUB_CLIENT_SECRET`, `SEPAY_BANK_HUB_WEBHOOK_SECRET`, `APP_BASE_URL`
+- [ ] Thêm @EnableScheduling vào `BankingSystemApplication.java`
+- [ ] Kiểm tra Config/Sepay: `SepayConfig.java` cấu hình RestClient + RateLimiter
+- [ ] Kiểm tra Entity: `SepayAccount`, `SepayTransaction`, `SpendingCategory`, `Budget`
+- [ ] Kiểm tra Enum: `SepayAccountStatus`, `TransactionDirection`, `SyncSourceType`
+- [ ] Kiểm tra Controller: `PersonalFinanceController`, `SepayBankHubController`, `SepayWebhookController`
+- [ ] Kiểm tra Service: `PersonalFinanceService`, `SepayBankAccountService`, `SepayTransactionSyncService`, `SepayBankHubService`, `SpendingCategoryService`
+- [ ] Kiểm tra Repository: `SepayTransactionRepository`, `SepayBankAccountRepository`, `BudgetRepository`, `SpendingCategoryRepository`
+- [ ] Cập nhật `SecurityConfig`: thêm `/api/v1/bank-hub/**`, `/api/v1/sepay/webhook`, `/api/v1/bank-hub/webhook`, `/api/v1/bank-hub/callback` với `.permitAll()`
+- [ ] Thêm Kafka topics vào `application.properties`
 - [ ] Chạy `mvn clean install` và `mvn test`
-- [ ] Test Swagger UI: tag "Personal Finance"
+- [ ] Đăng ký Webhook URLs tại `my.sepay.vn`:
+  - Webhook Transaction: `/api/v1/sepay/webhook`
+  - Bank Hub Webhook: `/api/v1/bank-hub/webhook`
+  - Bank Hub Callback: `/api/v1/bank-hub/callback`
+- [ ] Test Swagger UI: `/swagger-ui.html` → verify "Personal Finance" tags
 
-> **Lưu ý quan trọng:**
-> - Webhook endpoint KHÔNG dùng JWT → cần `permitAll()` trong SecurityConfig,
-    >   bảo vệ bằng Apikey header
-> - `since_id` trong Pull API cho phép incremental sync, tránh kéo lại toàn bộ lịch sử
-> - Rate limit SePay 3 req/s — Guava `RateLimiter.create(3)` đảm bảo không bị HTTP 429
-> - `sepayId` từ webhook không có → dùng `referenceNumber` làm dedup key cho webhook;
-    >   dùng `sepayId` cho Pull API
-> - Không bao giờ log `SEPAY_API_TOKEN` — mask trước khi ghi log
+---
+
+## 15. Lưu ý quan trọng
+
+> **Bank Hub vs Manual Add:**
+> - **Recommended**: Bank Hub (hosted link — user-friendly, OTP-protected)
+> - **Fallback**: Manual Add (user nhập number — nếu Bank Hub không khả dụng)
+> - Webhook từ Bank Hub khác webhook giao dịch — cần xử lý riêng
+
+> **Pull API + Incremental Sync:**
+> - `since_id` tránh kéo lại toàn bộ lịch sử
+> - Scheduled mỗi 15 phút (tunable)
+> - Rate limit: 3 req/s (`RateLimiter.acquire()` auto-block)
+
+> **Webhook Deduplication:**
+> - Transaction webhook: dùng `referenceCode`
+> - Bank Hub webhook: dùng `linkTokenXid` hoặc `bankAccountXid`
+> - Implement idempotency key trong DB check
+
+> **Kafka Events:**
+> - `budget-alert`: Trigger cảnh báo khi exceed threshold
+> - `sepay-sync`: Notify sync completion (count transactions)
+> - `sepay-transaction`: Real-time transaction event
+
+> **Security:**
+> - Mask account numbers in logs
+> - Never log API token — use `****` masking
+> - Verify Apikey header in webhook endpoints
+> - Bank Hub redirect URL phải HTTPS
+
+> **Future Enhancements:**
+> - Savings goals (target amount + deadline)
+> - Recurring transactions (auto-classify, template)
+> - Budget forecast (trend analysis)
+> - Export reports (PDF, CSV)
+> - Multi-currency support (VND, USD, etc)
