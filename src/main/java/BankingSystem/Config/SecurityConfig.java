@@ -59,7 +59,8 @@ public class SecurityConfig {
                                 "/swagger-resources/**",
                                 "/webjars/**",
                                 "/actuator/**",
-                                "/error"
+                                "/error",
+                                "/actuator/**"
                         ).permitAll()
 
                         // ── Webhook — bảo vệ bằng custom header, không cần JWT ─
