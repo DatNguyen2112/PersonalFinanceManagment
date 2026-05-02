@@ -50,6 +50,7 @@ public class SepayWebhookService {
             var category = categoryService.autoClassify(payload.content());
 
             var tx = SepayTransaction.builder()
+                    .sepayId(account.getId())
                     .user(account.getUser())
                     .sepayBankAccount(account)
                     .accountNumber(payload.accountNumber())
