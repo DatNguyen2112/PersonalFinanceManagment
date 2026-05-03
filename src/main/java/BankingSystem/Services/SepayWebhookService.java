@@ -43,8 +43,7 @@ public class SepayWebhookService {
                     .orElseThrow(() -> new BankAccountNotFoundException(
                             payload.accountNumber()));
 
-            var direction = payload.amountIn() != null
-                    && payload.amountIn().compareTo(BigDecimal.ZERO) > 0
+            var direction = payload.transferType() != null && payload.transferType().equalsIgnoreCase("IN")
                     ? TransactionDirection.IN : TransactionDirection.OUT;
 
             var category = categoryService.autoClassify(payload.content());
@@ -56,8 +55,7 @@ public class SepayWebhookService {
                     .accountNumber(payload.accountNumber())
                     .bankBrandName(payload.gateway())
                     .transactionDate(parseDate(payload.transactionDate()))
-                    .amountIn(coalesce(payload.amountIn()))
-                    .amountOut(coalesce(payload.amountOut()))
+                    .amountIn(coalesce(payload.transferAmount()))
                     .accumulated(coalesce(payload.accumulated()))
                     .transactionContent(payload.content())
                     .referenceNumber(payload.referenceCode())
@@ -72,8 +70,7 @@ public class SepayWebhookService {
 
             log.info("sepay_webhook_saved account={} direction={} amount={}",
                     payload.accountNumber(), direction,
-                    direction == TransactionDirection.IN
-                            ? payload.amountIn() : payload.amountOut());
+                    payload.transferAmount());
 
             kafkaProducerService.sendSepayTransaction(
                     account.getUser().getId(),
