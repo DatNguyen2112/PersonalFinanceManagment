@@ -34,16 +34,6 @@ public class SepayWebhookService {
     @Transactional
     public void process(BankingDTO.SepayWebhookPayload payload) {
         try {
-
-            Long sepayId = payload.id(); // hoặc reference number
-
-            // ✅ Check duplicate trước khi xử lý
-            if (transactionRepository.existsBySepayId(sepayId)) {
-                log.warn("sepay_webhook_duplicate_skipped ref={} sepayId={}",
-                        payload.referenceCode(), sepayId);
-                return; // Bỏ qua, không throw exception
-            }
-
             if (transactionRepository.existsByReferenceNumber(payload.referenceCode())) {
                 log.info("sepay_webhook_duplicate ref={}", payload.referenceCode());
                 return;
@@ -60,7 +50,7 @@ public class SepayWebhookService {
             var category = categoryService.autoClassify(payload.content());
 
             var tx = SepayTransaction.builder()
-                    .sepayId(account.getId())
+                    .sepayId(payload.id())
                     .user(account.getUser())
                     .sepayBankAccount(account)
                     .accountNumber(payload.accountNumber())
