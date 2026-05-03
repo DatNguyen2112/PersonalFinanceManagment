@@ -11,6 +11,7 @@ import BankingSystem.Repositories.SepayBankAccountRepository;
 import BankingSystem.Repositories.SepayTransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +34,16 @@ public class SepayWebhookService {
     @Transactional
     public void process(BankingDTO.SepayWebhookPayload payload) {
         try {
+
+            Long sepayId = payload.id(); // hoặc reference number
+
+            // ✅ Check duplicate trước khi xử lý
+            if (transactionRepository.existsBySepayId(sepayId)) {
+                log.warn("sepay_webhook_duplicate_skipped ref={} sepayId={}",
+                        payload.referenceCode(), sepayId);
+                return; // Bỏ qua, không throw exception
+            }
+
             if (transactionRepository.existsByReferenceNumber(payload.referenceCode())) {
                 log.info("sepay_webhook_duplicate ref={}", payload.referenceCode());
                 return;
@@ -78,6 +89,9 @@ public class SepayWebhookService {
 
         } catch (BankAccountNotFoundException ex) {
             log.warn("sepay_webhook_unknown_account account={}", payload.accountNumber());
+        } catch (DataIntegrityViolationException ex) {
+            log.warn("sepay_webhook_duplicate_skipped ref={}",
+                    payload.referenceCode());
         } catch (DateTimeParseException ex) {
             log.error("sepay_webhook_invalid_date date={} error={}",
                     payload.transactionDate(), ex.getMessage());

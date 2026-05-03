@@ -8,6 +8,7 @@ import BankingSystem.Services.SepayWebhookService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -29,13 +30,19 @@ public class SepayWebhookController {
             @RequestBody BankingDTO.SepayWebhookPayload payload,
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
 
-        authValidator.validateUserApiWebhook(authHeader);
+        try {
+            authValidator.validateUserApiWebhook(authHeader);
 
-        log.info("sepay_webhook_received account={} transferAmount={} transferType={}",
-                payload.accountNumber(), payload.transferAmount(), payload.transferType());
+            log.info("sepay_webhook_received account={} transferAmount={} transferType={}",
+                    payload.accountNumber(), payload.transferAmount(), payload.transferType());
 
-        webhookService.process(payload);
+            webhookService.process(payload);
 
+            return ResponseEntity.ok(Map.of("success", true));
+        } catch (DataIntegrityViolationException ex) {
+            log.warn("duplicate webhook ignored ref={}", payload.referenceCode());
+        }
+        // ✅ Luôn trả 200 để SePay không retry
         return ResponseEntity.ok(Map.of("success", true));
     }
 }
