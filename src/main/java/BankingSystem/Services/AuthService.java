@@ -103,6 +103,7 @@ public class AuthService {
 
     private BankingDTO.AuthResponse buildAuthResponse(User user, String accessToken, String refreshToken) {
         return BankingDTO.AuthResponse.builder()
+                .isSuccess(true)
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
                 .tokenType("Bearer")
