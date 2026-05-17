@@ -109,7 +109,6 @@ services:
     environment:
       KAFKA_CLUSTERS_0_NAME: banking
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
-      SERVER_SERVLET_CONTEXT_PATH: /kafka-ui
     networks:
       - banking-network
 
