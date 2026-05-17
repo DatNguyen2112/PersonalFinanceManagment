@@ -142,7 +142,9 @@ public class PersonalFinanceService {
     public Page<BankingDTO.TransactionResponse> getTransactions(
             Long userId, BankingDTO.TransactionQueryRequest req) {
 
-        var pageable = PageRequest.of(req.page(), req.size(),
+        log.info("getTransactions userId={} req={}", userId, req);
+
+        var pageable = PageRequest.of(Math.max(0, req.page() - 1), req.size(),
                 Sort.by(Sort.Direction.DESC, "transactionDate"));
 
         return transactionRepository
