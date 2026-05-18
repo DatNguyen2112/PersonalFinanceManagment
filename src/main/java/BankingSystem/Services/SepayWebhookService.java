@@ -12,7 +12,6 @@ import BankingSystem.Repositories.SepayTransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -69,9 +68,9 @@ public class SepayWebhookService {
 
             transactionRepository.save(tx);
 
-            log.info("sepay_webhook_saved account={} direction={} amount={}",
+            log.info("sepay_webhook_saved account={} direction={} amount={} category={}",
                     payload.accountNumber(), direction,
-                    payload.transferAmount());
+                    payload.transferAmount(), category);
 
             kafkaProducerService.sendSepayTransaction(
                     account.getUser().getId(),

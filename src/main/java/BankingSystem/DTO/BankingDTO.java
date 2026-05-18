@@ -100,12 +100,6 @@ public class BankingDTO {
             List<SepayTransactionItem> transactions
     ) {}
 
-    public record SepayTransactionDetailResponse(
-            int status,
-            String error,
-            SepayTransactionItem transaction
-    ) {}
-
     public record SepayListRequest(
             String accountNumber,
             Long sinceId,
@@ -210,6 +204,73 @@ public class BankingDTO {
                 BigDecimal amount,
                 int transactionCount,
                 int sharePercent
+        ) {}
+    }
+
+    public record DashboardResponse(
+            BankingDTO.MonthlySummaryResponse monthly,
+            MonthlyCategoryResponse category,
+            List<MonthlyBarData> cashFlow,
+            List<BankingDTO.TransactionResponse> recentTx,
+            List<BankingDTO.BudgetStatusResponse> budgets
+    ) {}
+
+    public record MonthlyBarData(
+            String label,
+            int year,
+            int month,
+            BigDecimal income,
+            BigDecimal expense
+    ) {}
+
+    public record BudgetListResponse(
+            int year,
+            int month,
+            BankingDTO.BudgetStatusResponse total,
+            List<BankingDTO.BudgetStatusResponse> items,
+            int alertCount,
+            int totalCount
+    ) {}
+
+    public record YearlySummaryResponse(
+            int year,
+            BigDecimal totalIncome,
+            BigDecimal totalExpense,
+            BigDecimal netSavings,
+            int savingsRate,
+            BigDecimal avgMonthlyIncome,
+            BigDecimal avgMonthlyExpense,
+            List<MonthlyBarData> monthlyBars
+    ) {}
+
+    public record CategoryReportResponse(
+            int year,
+            BigDecimal totalExpense,
+            BigDecimal totalIncome,
+            List<CategoryItem> expenseItems,
+            List<CategoryItem> incomeItems
+    ) {}
+
+    public record CategoryItem(
+            String categoryName,
+            String color,
+            BigDecimal amount,
+            int percentage
+    ) {}
+
+    public record MonthlyCategoryResponse(
+            int year,
+            int month,
+            String label,
+            BigDecimal totalExpense,
+            List<CategorySlice> items
+    ) {
+        public record CategorySlice(
+                String categoryName,
+                String color,
+                BigDecimal amount,
+                int percentage,
+                int transactionCount
         ) {}
     }
 }

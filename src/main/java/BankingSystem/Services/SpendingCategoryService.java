@@ -6,7 +6,9 @@ import BankingSystem.Repositories.SpendingCategoryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -34,7 +36,18 @@ public class SpendingCategoryService {
                 .orElse(null);
     }
 
-    public List<SpendingCategory> getSystemCategories(Long userId) {
-        return categoryRepository.findBySystemTrue(userId);
+    @Transactional(readOnly = true)
+    public List<SpendingCategory> getCategories(Long userId) {
+        return categoryRepository.findSystemAndUserCategories(userId)
+                .stream()
+                .map(sc -> SpendingCategory.builder()
+                        .id(sc.getId())
+                        .name(sc.getName())
+                        .iconCode(sc.getIconCode())
+                        .color(sc.getColor())
+                        .system(sc.isSystem())
+                        .keywords(new ArrayList<>(sc.getKeywords()))
+                        .build())
+                .toList();
     }
 }
