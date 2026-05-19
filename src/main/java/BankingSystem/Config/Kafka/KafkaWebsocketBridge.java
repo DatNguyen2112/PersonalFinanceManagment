@@ -1,6 +1,7 @@
 package BankingSystem.Config.Kafka;
 
 import BankingSystem.Config.Websocket.WsMessage;
+import BankingSystem.Repositories.SepayTransactionRepository;
 import BankingSystem.Services.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,12 +20,20 @@ public class KafkaWebsocketBridge {
 
     private final SimpMessagingTemplate ws;
     private final NotificationService   notificationService;
+    private final SepayTransactionRepository transactionRepository;
 
     // ── 1. Transaction ──────────────────────────────────────────────────────
     @KafkaListener(topics = "banking.sepay.transaction", groupId = "ws-bridge-group")
     public void onTransaction(Map<String, Object> payload, Acknowledgment ack) {
         try {
-            Long userId = toLong(payload.get("userId"));
+            // accountNumber is always present in SePay webhook payload
+            String accountNumber = str(payload.get("accountNumber"), null);
+
+            // Look up userId from the account number
+            Long userId = accountNumber != null
+                    ? transactionRepository.findUserIdByAccountNumber(accountNumber)
+                    : null;
+
             var  msg    = WsMessage.transaction(formatTransaction(payload), payload);
 
             // 1. Save to DB
@@ -46,7 +55,14 @@ public class KafkaWebsocketBridge {
     @KafkaListener(topics = "banking.sepay.budget-alert", groupId = "ws-bridge-group")
     public void onBudgetAlert(Map<String, Object> payload, Acknowledgment ack) {
         try {
-            Long userId = toLong(payload.get("userId"));
+            // accountNumber is always present in SePay webhook payload
+            String accountNumber = str(payload.get("accountNumber"), null);
+
+            // Look up userId from the account number
+            Long userId = accountNumber != null
+                    ? transactionRepository.findUserIdByAccountNumber(accountNumber)
+                    : null;
+
             var  msg    = WsMessage.budgetAlert(formatBudgetAlert(payload), payload);
 
             // 1. Save to DB

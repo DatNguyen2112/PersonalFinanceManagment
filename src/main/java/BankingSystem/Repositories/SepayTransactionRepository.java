@@ -19,6 +19,9 @@ public interface SepayTransactionRepository
 
     boolean existsByReferenceNumber(String referenceNumber);
 
+    @Query("SELECT t.user.id FROM SepayTransaction t WHERE t.accountNumber = :accountNumber ORDER BY t.id DESC LIMIT 1")
+    Long findUserIdByAccountNumber(@Param("accountNumber") String accountNumber);
+
     @Query("""
         SELECT t FROM SepayTransaction t
         LEFT JOIN FETCH t.category
