@@ -41,8 +41,11 @@ public class SpendingCategorySeeder implements CommandLineRunner {
 
         SYSTEM_CATEGORIES.forEach(data -> categoryRepository.save(
                 SpendingCategory.builder()
-                        .name(data.name()).iconCode(data.icon()).color(data.color())
-                        .system(true).keywords(data.keywords())
+                        .name(data.name())
+                        .iconCode(data.icon())
+                        .color(data.color())
+                        .system(true)
+                        .keywords(data.keywords())
                         .build()
         ));
 

@@ -21,7 +21,6 @@ public interface BudgetRepository extends JpaRepository<Budget, Long> {
     @Query("""
             SELECT b FROM Budget b
             WHERE b.user.id = :userId
-              AND b.category IS NULL
               AND b.year = :year
               AND b.month = :month
             """)

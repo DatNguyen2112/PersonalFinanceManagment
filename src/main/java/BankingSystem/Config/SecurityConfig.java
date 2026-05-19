@@ -43,6 +43,9 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
+                .csrf(csrf -> csrf
+                        .ignoringRequestMatchers("/ws/**")       // ← disable CSRF for WS
+                )
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .formLogin(AbstractHttpConfigurer::disable)
@@ -73,7 +76,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/bank-hub/init-unlink").hasAnyRole("CUSTOMER", "ADMIN")
                         .requestMatchers("/api/v1/bank-hub/sync").hasAnyRole("CUSTOMER", "ADMIN")
                         .requestMatchers("/api/v1/bank-hub/callback").permitAll()   // SePay redirect
-                        .requestMatchers("/api/v1/bank-hub/webhook").permitAll()    // SePay Bank Hub gọi vào
+                        .requestMatchers("/api/v1/bank-hub/webhook").permitAll()
+                        .requestMatchers("/ws/**").permitAll()// SePay Bank Hub gọi vào
+
 
                         // ── Personal Finance — yêu cầu JWT ─────────────────────
                         .requestMatchers("/api/v1/personal-finance/**")

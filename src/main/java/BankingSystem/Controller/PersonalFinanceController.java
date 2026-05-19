@@ -129,21 +129,14 @@ public class PersonalFinanceController {
     }
 
     @GetMapping("/budgets")
-    @Operation(summary = "Danh sách ngân sách tháng")
-    public ResponseEntity<BankingDTO.BudgetListResponse> getBudgets(
+    @Operation(summary = "Tổng hợp ngân sách theo tháng")
+    public ResponseEntity<BankingDTO.BudgetSummaryResponse> getBudgetSummary(
             @AuthenticationPrincipal UserDetailsImpl.BankingUserDetails u,
-            @RequestParam(defaultValue = "#{T(java.time.LocalDate).now().year}") int year,
+            @RequestParam(defaultValue = "#{T(java.time.LocalDate).now().year}")       int year,
             @RequestParam(defaultValue = "#{T(java.time.LocalDate).now().monthValue}") int month) {
 
-        var items  = financeService.getBudgets(u.getUserId(), year, month);
-        var total  = financeService.getBudgetStatus(u.getUserId(), null, year, month);  // null categoryId = total
-
-        var response = new BankingDTO.BudgetListResponse(
-                year, month, total, items,
-                (int) items.stream().filter(BankingDTO.BudgetStatusResponse::alertTriggered).count(),
-                items.size());
-
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(
+                financeService.getBudgetSummary(u.getUserId(), year, month));
     }
 
     // ── Báo cáo ────────────────────────────────────────────────────────────

@@ -92,13 +92,15 @@ public class BankingDTO {
             @JsonProperty("code") String code,
             @JsonProperty("sub_account") String subAccount,
             @JsonProperty("bank_account_id") Long bankAccountId
-    ) {}
+    ) {
+    }
 
     public record SepayTransactionListResponse(
             int status,
             String error,
             List<SepayTransactionItem> transactions
-    ) {}
+    ) {
+    }
 
     public record SepayListRequest(
             String accountNumber,
@@ -106,7 +108,8 @@ public class BankingDTO {
             int limit,
             LocalDate dateMin,
             LocalDate dateMax
-    ) {}
+    ) {
+    }
 
     // ── Webhook payload ────────────────────────────────────────────────────────
 
@@ -123,7 +126,8 @@ public class BankingDTO {
             String content,
             @JsonProperty("referenceCode") String referenceCode,
             String description
-    ) {}
+    ) {
+    }
 
     // ── Application-level DTOs ─────────────────────────────────────────────────
 
@@ -131,7 +135,8 @@ public class BankingDTO {
             @NotBlank String accountNumber,
             @NotBlank String bankBrandName,
             String displayName
-    ) {}
+    ) {
+    }
 
     public record BankAccountResponse(
             Long id,
@@ -140,7 +145,8 @@ public class BankingDTO {
             String displayName,
             LocalDateTime lastSyncedAt,
             String status
-    ) {}
+    ) {
+    }
 
     public record TransactionResponse(
             Long id,
@@ -158,7 +164,8 @@ public class BankingDTO {
             String note,
             String direction,
             String source
-    ) {}
+    ) {
+    }
 
     public record TransactionQueryRequest(
             String accountNumber,
@@ -168,7 +175,8 @@ public class BankingDTO {
             String direction,          // IN | OUT
             int page,
             int size
-    ) {}
+    ) {
+    }
 
     public record BudgetRequest(
             Long categoryId,
@@ -176,7 +184,8 @@ public class BankingDTO {
             int month,
             @NotNull @Positive BigDecimal limitAmount,
             @Min(1) @Max(100) int alertThreshold
-    ) {}
+    ) {
+    }
 
     public record BudgetStatusResponse(
             Long budgetId,
@@ -188,7 +197,8 @@ public class BankingDTO {
             BigDecimal remainingAmount,
             int usagePercent,
             boolean alertTriggered
-    ) {}
+    ) {
+    }
 
     public record MonthlySummaryResponse(
             int year,
@@ -204,7 +214,8 @@ public class BankingDTO {
                 BigDecimal amount,
                 int transactionCount,
                 int sharePercent
-        ) {}
+        ) {
+        }
     }
 
     public record DashboardResponse(
@@ -213,7 +224,8 @@ public class BankingDTO {
             List<MonthlyBarData> cashFlow,
             List<BankingDTO.TransactionResponse> recentTx,
             List<BankingDTO.BudgetStatusResponse> budgets
-    ) {}
+    ) {
+    }
 
     public record MonthlyBarData(
             String label,
@@ -221,7 +233,8 @@ public class BankingDTO {
             int month,
             BigDecimal income,
             BigDecimal expense
-    ) {}
+    ) {
+    }
 
     public record BudgetListResponse(
             int year,
@@ -230,7 +243,8 @@ public class BankingDTO {
             List<BankingDTO.BudgetStatusResponse> items,
             int alertCount,
             int totalCount
-    ) {}
+    ) {
+    }
 
     public record YearlySummaryResponse(
             int year,
@@ -241,7 +255,8 @@ public class BankingDTO {
             BigDecimal avgMonthlyIncome,
             BigDecimal avgMonthlyExpense,
             List<MonthlyBarData> monthlyBars
-    ) {}
+    ) {
+    }
 
     public record CategoryReportResponse(
             int year,
@@ -249,14 +264,16 @@ public class BankingDTO {
             BigDecimal totalIncome,
             List<CategoryItem> expenseItems,
             List<CategoryItem> incomeItems
-    ) {}
+    ) {
+    }
 
     public record CategoryItem(
             String categoryName,
             String color,
             BigDecimal amount,
             int percentage
-    ) {}
+    ) {
+    }
 
     public record MonthlyCategoryResponse(
             int year,
@@ -271,6 +288,26 @@ public class BankingDTO {
                 BigDecimal amount,
                 int percentage,
                 int transactionCount
-        ) {}
+        ) {
+        }
+    }
+
+    public record BudgetSummaryResponse(
+            // ── period ──────────────────────────────────────────────────────
+            int year,
+            int month,
+            String label,
+
+            // ── header cards ────────────────────────────────────────────────
+            BigDecimal totalLimit,
+            BigDecimal totalSpent,
+            BigDecimal totalRemaining,
+            int overBudgetCount,
+            int totalCount,
+            // ── overall progress bar ─────────────────────────────────────────
+            int overallUsagePercent,
+            // ── category cards grid ──────────────────────────────────────────
+            List<BudgetStatusResponse> categories
+    ) {
     }
 }

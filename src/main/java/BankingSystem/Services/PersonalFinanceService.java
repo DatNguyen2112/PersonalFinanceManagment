@@ -355,6 +355,58 @@ public class PersonalFinanceService {
         }
     }
 
+    @Transactional(readOnly = true)
+    public BankingDTO.BudgetSummaryResponse getBudgetSummary(
+            Long userId, int year, int month) {
+        try {
+            // ── 1. fetch all category budgets ────────────────────────────────
+            List<BankingDTO.BudgetStatusResponse> categories =
+                    getBudgets(userId, year, month); // existing method
+
+            // ── 2. aggregate ─────────────────────────────────────────────────
+            BigDecimal totalLimit = categories.stream()
+                    .map(BankingDTO.BudgetStatusResponse::limitAmount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            BigDecimal totalSpent = categories.stream()
+                    .map(BankingDTO.BudgetStatusResponse::spentAmount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            BigDecimal totalRemaining = totalLimit.subtract(totalSpent);
+
+            long overBudgetCount = categories.stream()
+                    .filter(c -> c.spentAmount().compareTo(c.limitAmount()) > 0)
+                    .count();
+
+            int overallUsagePercent = computeUsagePercent(totalSpent, totalLimit);
+
+            String label = "Tháng %d/%d".formatted(month, year);
+
+            log.info("budget_summary userId={} year={} month={} categories={} usage={}%",
+                    userId, year, month, categories.size(), overallUsagePercent);
+
+            return new BankingDTO.BudgetSummaryResponse(
+                    year,
+                    month,
+                    label,
+                    totalLimit,
+                    totalSpent,
+                    totalRemaining,
+                    (int) overBudgetCount,
+                    categories.size(),
+                    overallUsagePercent,
+                    categories);
+
+        } catch (BankingException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            log.error("budget_summary_failed userId={} year={} month={} error={}",
+                    userId, year, month, ex.getMessage(), ex);
+            throw new BankingException("BUDGET_SUMMARY_ERROR",
+                    "Không thể lấy tổng hợp ngân sách", ex);
+        }
+    }
+
     // ── Private helpers ────────────────────────────────────────────────────
 
     private SpendingCategory resolveCategory(Long categoryId) {
