@@ -41,7 +41,7 @@ public class KafkaWebsocketBridge {
 
             // Load full entity from DB
             SepayTransaction tx = txId != null
-                    ? transactionRepository.findById(txId).orElse(null)
+                    ? transactionRepository.findByIdWithCategory(txId).orElse(null)
                     : null;
 
             String text          = tx != null ? formatTransaction(tx) : "Giao dịch mới";
@@ -72,7 +72,7 @@ public class KafkaWebsocketBridge {
 
             // Load full budget entity from DB
             Budget budget = budgetId != null
-                    ? budgetRepository.findById(budgetId).orElse(null)
+                    ? budgetRepository.findByIdWithCategory(budgetId).orElse(null)
                     : null;
 
             String text          = budget != null ? formatBudgetAlert(budget, usage) : "Cảnh báo ngân sách %d%%".formatted(usage);
