@@ -1,10 +1,10 @@
 package BankingSystem.Config.Kafka;
 
 import BankingSystem.Config.Websocket.WsMessage;
-import BankingSystem.Repositories.SepayTransactionRepository;
 import BankingSystem.Services.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -20,26 +20,20 @@ public class KafkaWebsocketBridge {
 
     private final SimpMessagingTemplate ws;
     private final NotificationService   notificationService;
-    private final SepayTransactionRepository transactionRepository;
 
     // ── 1. Transaction ──────────────────────────────────────────────────────
     @KafkaListener(topics = "banking.sepay.transaction", groupId = "ws-bridge-group")
-    public void onTransaction(Map<String, Object> payload, Acknowledgment ack) {
+    public void onTransaction(ConsumerRecord<String, Map<String, Object>> record,
+                              Acknowledgment ack) {
         try {
-            // accountNumber is always present in SePay webhook payload
-            String accountNumber = str(payload.get("accountNumber"), null);
+            // userId is the message KEY set by KafkaProducerService.sendSepayTransaction()
+            Long userId = toLong(record.key());
+            Map<String, Object> payload = record.value();
 
-            // Look up userId from the account number
-            Long userId = accountNumber != null
-                    ? transactionRepository.findUserIdByAccountNumber(accountNumber)
-                    : null;
+            var msg = WsMessage.transaction(formatTransaction(payload), payload);
 
-            var  msg    = WsMessage.transaction(formatTransaction(payload), payload);
-
-            // 1. Save to DB
             if (userId != null) notificationService.save(userId, msg, payload);
 
-            // 2. Push to WebSocket
             ws.convertAndSend("/topic/transactions", msg);
             if (userId != null)
                 ws.convertAndSendToUser(userId.toString(), "/topic/transactions", msg);
@@ -53,22 +47,17 @@ public class KafkaWebsocketBridge {
 
     // ── 2. Budget alert ─────────────────────────────────────────────────────
     @KafkaListener(topics = "banking.sepay.budget-alert", groupId = "ws-bridge-group")
-    public void onBudgetAlert(Map<String, Object> payload, Acknowledgment ack) {
+    public void onBudgetAlert(ConsumerRecord<String, Map<String, Object>> record,
+                              Acknowledgment ack) {
         try {
-            // accountNumber is always present in SePay webhook payload
-            String accountNumber = str(payload.get("accountNumber"), null);
+            // userId is the message KEY set by KafkaProducerService.sendBudgetAlert()
+            Long userId = toLong(record.key());
+            Map<String, Object> payload = record.value();
 
-            // Look up userId from the account number
-            Long userId = accountNumber != null
-                    ? transactionRepository.findUserIdByAccountNumber(accountNumber)
-                    : null;
+            var msg = WsMessage.budgetAlert(formatBudgetAlert(payload), payload);
 
-            var  msg    = WsMessage.budgetAlert(formatBudgetAlert(payload), payload);
-
-            // 1. Save to DB
             if (userId != null) notificationService.save(userId, msg, payload);
 
-            // 2. Push to WebSocket (broadcast + per-user)
             ws.convertAndSend("/topic/budget-alerts", msg);
             if (userId != null)
                 ws.convertAndSendToUser(userId.toString(), "/topic/budget-alerts", msg);
@@ -80,7 +69,7 @@ public class KafkaWebsocketBridge {
         }
     }
 
-    // ── Formatters ──────────────────────────────────────────────────────────
+    // ── Formatters (unchanged) ──────────────────────────────────────────────
 
     private String formatTransaction(Map<String, Object> p) {
         var amountIn  = toBigDecimal(p.get("amountIn"));
