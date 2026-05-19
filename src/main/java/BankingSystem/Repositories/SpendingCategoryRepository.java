@@ -10,16 +10,12 @@ import java.util.List;
 
 @Repository
 public interface SpendingCategoryRepository extends JpaRepository<SpendingCategory, Long> {
-    List<SpendingCategory> findBySystemTrue(Long userId);
-
-    // Trả về cả danh mục hệ thống lẫn danh mục của user
     @Query("""
-        SELECT c FROM SpendingCategory c
-        WHERE c.system = true
-           OR c.user.id = :userId
-        ORDER BY c.system DESC, c.name ASC
-        """)
-    List<SpendingCategory> findByUserIdOrSystemTrue(@Param("userId") Long userId);
+    SELECT DISTINCT sc FROM SpendingCategory sc
+    LEFT JOIN FETCH sc.keywords
+    WHERE sc.system = true OR sc.user.id = :userId
+    """)
+    List<SpendingCategory> findSystemAndUserCategories(@Param("userId") Long userId);
 
     // Fetch kèm keywords để tránh LazyInitializationException trong autoClassify
     @Query("""

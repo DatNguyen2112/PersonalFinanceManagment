@@ -11,7 +11,7 @@ import BankingSystem.Repositories.SepayBankAccountRepository;
 import BankingSystem.Repositories.SepayTransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,20 +43,19 @@ public class SepayWebhookService {
                     .orElseThrow(() -> new BankAccountNotFoundException(
                             payload.accountNumber()));
 
-            var direction = payload.amountIn() != null
-                    && payload.amountIn().compareTo(BigDecimal.ZERO) > 0
+            var direction = payload.transferType() != null && payload.transferType().equalsIgnoreCase("IN")
                     ? TransactionDirection.IN : TransactionDirection.OUT;
 
             var category = categoryService.autoClassify(payload.content());
 
             var tx = SepayTransaction.builder()
+                    .sepayId(payload.id())
                     .user(account.getUser())
                     .sepayBankAccount(account)
                     .accountNumber(payload.accountNumber())
                     .bankBrandName(payload.gateway())
                     .transactionDate(parseDate(payload.transactionDate()))
-                    .amountIn(coalesce(payload.amountIn()))
-                    .amountOut(coalesce(payload.amountOut()))
+                    .amountIn(coalesce(payload.transferAmount()))
                     .accumulated(coalesce(payload.accumulated()))
                     .transactionContent(payload.content())
                     .referenceNumber(payload.referenceCode())
@@ -69,10 +68,9 @@ public class SepayWebhookService {
 
             transactionRepository.save(tx);
 
-            log.info("sepay_webhook_saved account={} direction={} amount={}",
+            log.info("sepay_webhook_saved account={} direction={} amount={} category={}",
                     payload.accountNumber(), direction,
-                    direction == TransactionDirection.IN
-                            ? payload.amountIn() : payload.amountOut());
+                    payload.transferAmount(), category);
 
             kafkaProducerService.sendSepayTransaction(
                     account.getUser().getId(),
@@ -80,6 +78,9 @@ public class SepayWebhookService {
 
         } catch (BankAccountNotFoundException ex) {
             log.warn("sepay_webhook_unknown_account account={}", payload.accountNumber());
+        } catch (DataIntegrityViolationException ex) {
+            log.warn("sepay_webhook_duplicate_skipped ref={}",
+                    payload.referenceCode());
         } catch (DateTimeParseException ex) {
             log.error("sepay_webhook_invalid_date date={} error={}",
                     payload.transactionDate(), ex.getMessage());

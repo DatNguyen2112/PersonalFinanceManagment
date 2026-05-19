@@ -1,27 +1,19 @@
 package BankingSystem.Controller;
 
 import BankingSystem.DTO.BankingDTO;
-import BankingSystem.DTO.SepayBankHub;
 import BankingSystem.Entity.SpendingCategory;
 import BankingSystem.JWTConfig.UserDetailsImpl;
 import BankingSystem.Services.*;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -36,7 +28,42 @@ public class PersonalFinanceController {
     private final SepayTransactionSyncService syncService;
     private final PersonalFinanceService financeService;
     private final SpendingCategoryService categoryService;
-    private final SepayBankHubService bankHubService;
+
+    @GetMapping("/dashboard")
+    @Operation(summary = "Lấy dữ liệu Tổng quan (Dashboard)")
+    public ResponseEntity<BankingDTO.DashboardResponse> getDashboard(
+            @AuthenticationPrincipal UserDetailsImpl.BankingUserDetails u) {
+
+        int year  = LocalDate.now().getYear();
+        int month = LocalDate.now().getMonthValue();
+
+        // Monthly summary (income, expense, savings)
+        var monthly = financeService.getMonthlySummary(u.getUserId(), year, month);
+
+        // Last 6 months cash-flow for chart
+        var cashFlow = financeService.getLast6MonthsCashFlow(u.getUserId());
+
+        // Latest 5 transactions
+        var recentReq = new BankingDTO.TransactionQueryRequest(
+                null, null, null, null, null, 1, 5);
+        var recentTx = financeService.getTransactions(u.getUserId(), recentReq).getContent();
+
+        // Top budget categories for the sidebar widget
+        var budgets = financeService.getBudgets(u.getUserId(), year, month);
+
+        // Expense categories with highest spending this month (for budget alerts)
+        var expenses = financeService.getMonthlyCategoryReport(u.getUserId(), year, month);
+
+
+        var response = new BankingDTO.DashboardResponse(
+                monthly,
+                expenses,
+                cashFlow,
+                recentTx,
+                budgets);
+
+        return ResponseEntity.ok(response);
+    }
 
     // ── Tài khoản ngân hàng ────────────────────────────────────────────────
 
@@ -88,7 +115,7 @@ public class PersonalFinanceController {
     @GetMapping("/categories")
     public ResponseEntity<List<SpendingCategory>> getCategories(
             @AuthenticationPrincipal UserDetailsImpl.BankingUserDetails u) {
-        return ResponseEntity.ok(categoryService.getSystemCategories(u.getUserId()));
+        return ResponseEntity.ok(categoryService.getCategories(u.getUserId()));
     }
 
     // ── Ngân sách ──────────────────────────────────────────────────────────
@@ -102,25 +129,36 @@ public class PersonalFinanceController {
     }
 
     @GetMapping("/budgets")
-    public ResponseEntity<List<BankingDTO.BudgetStatusResponse>> getBudgets(
-            @RequestParam(defaultValue = "0") int year,
-            @RequestParam(defaultValue = "0") int month,
-            @AuthenticationPrincipal UserDetailsImpl.BankingUserDetails u) {
-        int y = year  == 0 ? LocalDate.now().getYear()        : year;
-        int m = month == 0 ? LocalDate.now().getMonthValue()  : month;
-        return ResponseEntity.ok(financeService.getBudgets(u.getUserId(), y, m));
+    @Operation(summary = "Tổng hợp ngân sách theo tháng")
+    public ResponseEntity<BankingDTO.BudgetSummaryResponse> getBudgetSummary(
+            @AuthenticationPrincipal UserDetailsImpl.BankingUserDetails u,
+            @RequestParam(defaultValue = "#{T(java.time.LocalDate).now().year}")       int year,
+            @RequestParam(defaultValue = "#{T(java.time.LocalDate).now().monthValue}") int month) {
+
+        return ResponseEntity.ok(
+                financeService.getBudgetSummary(u.getUserId(), year, month));
     }
 
     // ── Báo cáo ────────────────────────────────────────────────────────────
 
-    @GetMapping("/reports/monthly")
-    public ResponseEntity<BankingDTO.MonthlySummaryResponse> monthlySummary(
-            @RequestParam(defaultValue = "0") int year,
-            @RequestParam(defaultValue = "0") int month,
-            @AuthenticationPrincipal UserDetailsImpl.BankingUserDetails u) {
-        int y = year  == 0 ? LocalDate.now().getYear()       : year;
-        int m = month == 0 ? LocalDate.now().getMonthValue() : month;
-        return ResponseEntity.ok(financeService.getMonthlySummary(u.getUserId(), y, m));
+    @GetMapping("/reports/summary")
+    @Operation(summary = "Báo cáo tổng quan năm")
+    public ResponseEntity<BankingDTO.YearlySummaryResponse> getYearlySummary(
+            @AuthenticationPrincipal UserDetailsImpl.BankingUserDetails u,
+            @RequestParam(defaultValue = "#{T(java.time.LocalDate).now().year}") int year) {
+
+        return ResponseEntity.ok(
+                financeService.getYearlySummary(u.getUserId(), year));
+    }
+
+    @GetMapping("/reports/categories")
+    @Operation(summary = "Báo cáo chi tiêu và thu nhập theo danh mục")
+    public ResponseEntity<BankingDTO.CategoryReportResponse> getCategoryReport(
+            @AuthenticationPrincipal UserDetailsImpl.BankingUserDetails u,
+            @RequestParam(defaultValue = "#{T(java.time.LocalDate).now().year}") int year) {
+
+        return ResponseEntity.ok(
+                financeService.getCategoryReport(u.getUserId(), year));
     }
 }
 

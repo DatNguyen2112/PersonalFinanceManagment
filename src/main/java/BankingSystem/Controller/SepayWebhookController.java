@@ -8,6 +8,7 @@ import BankingSystem.Services.SepayWebhookService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -31,8 +32,8 @@ public class SepayWebhookController {
 
         authValidator.validateUserApiWebhook(authHeader);
 
-        log.info("sepay_webhook_received account={} amountIn={} amountOut={}",
-                payload.accountNumber(), payload.amountIn(), payload.amountOut());
+        log.info("sepay_webhook_received account={} transferAmount={} transferType={}",
+                payload.accountNumber(), payload.transferAmount(), payload.transferType());
 
         webhookService.process(payload);
 
