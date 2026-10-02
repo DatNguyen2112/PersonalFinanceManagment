@@ -1,6 +1,7 @@
 package BankingSystem.Services;
 
 import BankingSystem.Config.Kafka.KafkaEventConfig;
+import BankingSystem.Services.ImplService.ImplKafkaProducerService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.admin.NewTopic;
@@ -10,7 +11,7 @@ import org.springframework.stereotype.Service;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-public class KafkaProducerService {
+public class KafkaProducerService implements ImplKafkaProducerService {
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
@@ -22,7 +23,7 @@ public class KafkaProducerService {
 
     // ── Generic send — dùng cho mọi topic ─────────────────────────────────
 
-    public void send(NewTopic topic, String key, Object payload) {
+    private void send(NewTopic topic, String key, Object payload) {
         kafkaTemplate.send(topic.name(), key, payload)
                 .whenComplete((result, ex) -> {
                     if (ex != null) {

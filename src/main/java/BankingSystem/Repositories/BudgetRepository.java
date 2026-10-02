@@ -18,10 +18,12 @@ public interface BudgetRepository extends JpaRepository<Budget, Long> {
     Optional<Budget> findByUserIdAndCategoryIdAndYearAndMonth(
             Long userId, Long categoryId, int year, int month);
 
+    @Query("SELECT b FROM Budget b LEFT JOIN FETCH b.category WHERE b.id = :id")
+    Optional<Budget> findByIdWithCategory(@Param("id") Long id);
+
     @Query("""
             SELECT b FROM Budget b
             WHERE b.user.id = :userId
-              AND b.category IS NULL
               AND b.year = :year
               AND b.month = :month
             """)

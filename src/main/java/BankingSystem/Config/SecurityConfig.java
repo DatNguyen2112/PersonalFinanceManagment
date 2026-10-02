@@ -59,7 +59,9 @@ public class SecurityConfig {
                                 "/swagger-resources/**",
                                 "/webjars/**",
                                 "/actuator/**",
-                                "/error"
+                                "/error",
+                                "/actuator/**",
+                                "/ws/**"
                         ).permitAll()
 
                         // ── Webhook — bảo vệ bằng custom header, không cần JWT ─
@@ -72,7 +74,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/bank-hub/init-unlink").hasAnyRole("CUSTOMER", "ADMIN")
                         .requestMatchers("/api/v1/bank-hub/sync").hasAnyRole("CUSTOMER", "ADMIN")
                         .requestMatchers("/api/v1/bank-hub/callback").permitAll()   // SePay redirect
-                        .requestMatchers("/api/v1/bank-hub/webhook").permitAll()    // SePay Bank Hub gọi vào
+                        .requestMatchers("/api/v1/bank-hub/webhook").permitAll()
+
 
                         // ── Personal Finance — yêu cầu JWT ─────────────────────
                         .requestMatchers("/api/v1/personal-finance/**")

@@ -11,6 +11,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import javax.security.auth.login.AccountLockedException;
 import java.util.Map;
@@ -21,6 +22,12 @@ import java.util.stream.Collectors;
 public class GlobalExceptionHandler {
 
     // ── Banking domain exceptions ──────────────────────────────────────────
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public void handleNoResourceFound(NoResourceFoundException ex)
+            throws NoResourceFoundException {
+        throw ex; // re-throw để Spring MVC tự xử lý
+    }
 
     @ExceptionHandler(BankingException.class)
     public ResponseEntity<ErrorResponse> handleBankingException(

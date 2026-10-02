@@ -1,18 +1,23 @@
 package BankingSystem.Services;
 
+import BankingSystem.Config.DataSeeder.SpendingCategorySeeder;
 import BankingSystem.Entity.SpendingCategory;
 import BankingSystem.Repositories.SpendingCategoryRepository;
+import BankingSystem.Services.ImplService.ImplCategoryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
 @Slf4j
 @RequiredArgsConstructor
-public class SpendingCategoryService {
+public class SpendingCategoryService implements ImplCategoryService {
     private final SpendingCategoryRepository categoryRepository;
+    private final SpendingCategorySeeder seeder;
 
     /**
      * Phân loại giao dịch dựa trên keyword trong nội dung.
@@ -23,16 +28,27 @@ public class SpendingCategoryService {
         if (content == null) return null;
         String lower = content.toLowerCase();
 
-        return null; // Tạm thời tắt auto-classify để ưu tiên phân loại thủ công
+        seeder.run();
 
-//        return categoryRepository.findAllWithKeywords().stream()
-//                .filter(cat -> cat.getKeywords().stream()
-//                        .anyMatch(kw -> lower.contains(kw.toLowerCase())))
-//                .findFirst()
-//                .orElse(null);
+        return categoryRepository.findAllWithKeywords().stream()
+                .filter(cat -> cat.getKeywords().stream()
+                        .anyMatch(kw -> lower.contains(kw.toLowerCase())))
+                .findFirst()
+                .orElse(null);
     }
 
-    public List<SpendingCategory> getSystemCategories(Long userId) {
-        return categoryRepository.findBySystemTrue(userId);
+    @Transactional(readOnly = true)
+    public List<SpendingCategory> getCategories(Long userId) {
+        return categoryRepository.findSystemAndUserCategories(userId)
+                .stream()
+                .map(sc -> SpendingCategory.builder()
+                        .id(sc.getId())
+                        .name(sc.getName())
+                        .iconCode(sc.getIconCode())
+                        .color(sc.getColor())
+                        .system(sc.isSystem())
+                        .keywords(new ArrayList<>(sc.getKeywords()))
+                        .build())
+                .toList();
     }
 }
