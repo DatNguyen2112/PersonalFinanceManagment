@@ -9,6 +9,7 @@ import BankingSystem.Exception.BankAccountNotFoundException;
 import BankingSystem.Exception.BankingException;
 import BankingSystem.Repositories.SepayBankAccountRepository;
 import BankingSystem.Repositories.SepayTransactionRepository;
+import BankingSystem.Services.ImplService.ImplSepayWebhookService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -23,7 +24,7 @@ import java.time.format.DateTimeParseException;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-public class SepayWebhookService {
+public class SepayWebhookService implements ImplSepayWebhookService {
 
     private final SepayTransactionRepository transactionRepository;
     private final SepayBankAccountRepository bankAccountRepository;

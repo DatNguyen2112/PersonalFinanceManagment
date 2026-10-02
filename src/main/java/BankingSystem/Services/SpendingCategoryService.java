@@ -3,6 +3,7 @@ package BankingSystem.Services;
 import BankingSystem.Config.DataSeeder.SpendingCategorySeeder;
 import BankingSystem.Entity.SpendingCategory;
 import BankingSystem.Repositories.SpendingCategoryRepository;
+import BankingSystem.Services.ImplService.ImplCategoryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -14,7 +15,7 @@ import java.util.List;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-public class SpendingCategoryService {
+public class SpendingCategoryService implements ImplCategoryService {
     private final SpendingCategoryRepository categoryRepository;
     private final SpendingCategorySeeder seeder;
 

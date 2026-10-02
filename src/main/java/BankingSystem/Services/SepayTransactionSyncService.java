@@ -12,6 +12,7 @@ import BankingSystem.Exception.SepayApiException;
 import BankingSystem.Exception.SepayRateLimitException;
 import BankingSystem.Repositories.SepayBankAccountRepository;
 import BankingSystem.Repositories.SepayTransactionRepository;
+import BankingSystem.Services.ImplService.ImplSepayTransactionSyncService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -24,7 +25,7 @@ import java.time.format.DateTimeFormatter;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-public class SepayTransactionSyncService {
+public class SepayTransactionSyncService implements ImplSepayTransactionSyncService {
 
     private final SepayApiClient sepayApiClient;
     private final SepayBankAccountRepository bankAccountRepository;

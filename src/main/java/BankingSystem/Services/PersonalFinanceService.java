@@ -12,6 +12,7 @@ import BankingSystem.Exception.BudgetNotFoundException;
 import BankingSystem.Repositories.BudgetRepository;
 import BankingSystem.Repositories.SepayTransactionRepository;
 import BankingSystem.Repositories.SpendingCategoryRepository;
+import BankingSystem.Services.ImplService.ImplPersonalFinanceService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,7 +34,7 @@ import java.util.stream.IntStream;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-public class PersonalFinanceService {
+public class PersonalFinanceService implements ImplPersonalFinanceService {
 
     private final SepayTransactionRepository transactionRepository;
     private final BudgetRepository budgetRepository;

@@ -4,6 +4,7 @@ import BankingSystem.Config.JacksonConfig;
 import BankingSystem.Config.Websocket.WsMessage;
 import BankingSystem.Entity.Notification;
 import BankingSystem.Repositories.NotificationRepository;
+import BankingSystem.Services.ImplService.ImplNotificationService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,7 +19,7 @@ import java.util.Map;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-public class NotificationService {
+public class NotificationService implements ImplNotificationService {
 
     private final NotificationRepository repo;
     private final JacksonConfig config;

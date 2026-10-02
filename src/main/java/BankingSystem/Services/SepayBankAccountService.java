@@ -8,6 +8,7 @@ import BankingSystem.Exception.BankAccountNotFoundException;
 import BankingSystem.Exception.BankingException;
 import BankingSystem.Repositories.SepayBankAccountRepository;
 import BankingSystem.Repositories.UserRepository;
+import BankingSystem.Services.ImplService.ImplSepayBankAccountService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,7 +21,7 @@ import java.util.List;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-public class SepayBankAccountService {
+public class SepayBankAccountService implements ImplSepayBankAccountService {
 
     private final SepayBankAccountRepository bankAccountRepository;
     private final UserRepository userRepository;

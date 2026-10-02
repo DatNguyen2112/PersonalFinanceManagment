@@ -3,25 +3,22 @@ package BankingSystem.Services;
 import BankingSystem.DTO.BankingDTO;
 import BankingSystem.Entity.User;
 import BankingSystem.Exception.*;
+import BankingSystem.Services.ImplService.ImplAuthService;
 import BankingSystem.JWTConfig.JWTService;
 import BankingSystem.JWTConfig.UserDetailsImpl;
 import BankingSystem.Repositories.UserRepository;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.common.errors.DuplicateResourceException;
 import org.springframework.security.authentication.*;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import javax.security.auth.login.AccountLockedException;
 import java.time.LocalDateTime;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class AuthService {
+public class AuthService implements ImplAuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JWTService jwtService;
